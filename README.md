@@ -4,4 +4,4 @@
 
 ## Task Requirements
 
-![任务要求](original_task_requirements.md)
+[任务要求](original_task_requirements.md)
