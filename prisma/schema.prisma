@@ -13,6 +13,10 @@ model User {
   name      String?
   role      String   @default("user")
   createdAt DateTime @default(now())
+
+  accounts Account[]
+  sessions Session[]
+  orders   Order[]
 }
 
 model Hotel {
@@ -29,6 +33,7 @@ model Hotel {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   rooms        RoomType[]
+  orders        Order[]
 }
 
 model RoomType {
@@ -43,4 +48,58 @@ model RoomType {
   amenities      String?
   images         String?
   hotel          Hotel    @relation(fields: [hotelId], references: [id])
+  orders         Order[]
+}
+
+model Order {
+  id         String   @id @default(cuid())
+  userId     String
+  hotelId    String
+  roomTypeId String
+  checkIn    DateTime
+  checkOut   DateTime
+  totalPrice Float
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id])
+  hotel    Hotel    @relation(fields: [hotelId], references: [id])
+  roomType RoomType @relation(fields: [roomTypeId], references: [id])
+}
+
+// NextAuth models
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }
