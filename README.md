@@ -1,9 +1,18 @@
-# yisu-hotel-booking-platform
+# Mobile Monorepo
 
-易宿酒店预订平台是一个面向现代旅游出行场景的综合服务体系，旨在为酒店商家与终端消费者之间搭建高效、便捷的信息交互桥梁。
+This repo uses npm workspaces.
 
-## Task Requirements
+## Structure
 
-[任务要求](Task_requirements/original_task_requirements.md)
+- apps/mobile: Expo app
+- packages/shared: Shared types/constants
 
-[现有框架分析](Ai_assistance/existing_framework_comparison.md)
+## Quick Start
+
+From repo root:
+
+```bash
+cd apps/mobile
+npm install
+npx expo start
+```
