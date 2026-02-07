@@ -2,6 +2,10 @@
   "name": "mobile-monorepo",
   "private": true,
   "scripts": {
+    "test": "npm run test:web && npm run test:api && npm run test:mobile",
+    "test:web": "npm --prefix apps/web run test",
+    "test:api": "npm --prefix apps/api run test",
+    "test:mobile": "npm --prefix apps/mobile run test",
     "dev:web": "npm --prefix apps/web run dev",
     "dev:api": "npm --prefix apps/api run dev",
     "dev:mobile": "npm --prefix apps/mobile run start"
