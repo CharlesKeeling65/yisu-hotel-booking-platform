@@ -49,11 +49,13 @@ npm test
 ### 4.1 apps/web
 
 已完成：
+
 - 目录迁移完成并接入 Monorepo
 - 登录、管理台、酒店详情、酒店编辑、房型管理、管理员页面等基础页面已落地
 - 构建链路可运行
 
 待完成：
+
 - 商户录入与审核闭环联调
 - 发布/下线和状态流转完善
 - 权限与路由守卫落地
@@ -62,11 +64,13 @@ npm test
 ### 4.2 apps/mobile
 
 已完成：
+
 - 目录迁移完成并接入 Monorepo
 - 首页、列表、详情、定位、个人中心等页面骨架已落地
 - 与 `@yisu/shared` 建立依赖关系
 
 待完成：
+
 - 搜索/筛选/排序/分页能力完善
 - 下单与订单状态全流程对接 API
 - 真机体验、性能与兼容性优化
@@ -74,11 +78,13 @@ npm test
 ### 4.3 apps/api
 
 已完成：
+
 - Express + MySQL 服务框架迁移完成
 - 初始化 SQL 与样例数据已提供
 - 基础酒店/房型/订单能力骨架已具备
 
 待完成：
+
 - RBAC（管理员/商户/用户）权限体系
 - 审核、发布、下线完整接口设计与实现
 - 统一响应体、错误码、分页排序规范
@@ -87,19 +93,23 @@ npm test
 ### 4.4 packages/shared
 
 已完成：
+
 - `shared` 工作区和基础导出文件已建立
 
 待完成：
+
 - DTO、Schema（含 Zod）、枚举、错误码、API Client 共建
 - 三端共享契约正式落地
 
 ### 4.5 docs
 
 已完成：
+
 - 迁移计划与阶段文档已归档
 - Web/API 联调说明已补充
 
 待完成：
+
 - 开发/提交流程规范文档
 - 权限矩阵、路由图、联调 checklist 补齐
 
@@ -120,3 +130,11 @@ npm test
 2. 执行 `apps/api/sql/init_schema.sql`
 3. 按需执行 `apps/api/sql/seed_sample.sql`
 4. 再启动 `npm run dev:api` 联调 Web/Mobile
+
+本地部署流程：
+1、docker镜像安装，docker安装可参考文档https://blog.csdn.net/weixin_52286364/article/details/150379121
+2、本地docker.desktop登录docker后,在项目根目录执行`docker compose up -d`启动mysql数据库
+3、创建apps\api\.env文件，参照apps\api\.env.example文件写入数据库信息（直接复制内容粘贴即可）
+4、在项目根目录执行`npm install`安装依赖
+5、根目录执行`npm run dev`
+6、http://localhost:5173/进入商家/管理端，http://localhost:8081进入用户端

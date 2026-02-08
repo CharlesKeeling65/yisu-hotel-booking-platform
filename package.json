@@ -6,6 +6,7 @@
     "test:web": "npm --prefix apps/web run test",
     "test:api": "npm --prefix apps/api run test",
     "test:mobile": "npm --prefix apps/mobile run test",
+    "dev": "concurrently \"npm:dev:web\" \"npm:dev:api\" \"npm:dev:mobile\"",
     "dev:web": "npm --prefix apps/web run dev",
     "dev:api": "npm --prefix apps/api run dev",
     "dev:mobile": "npm --prefix apps/mobile run start"
@@ -13,5 +14,8 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "devDependencies": {
+    "concurrently": "^7.6.0"
+  }
 }

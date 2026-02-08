@@ -3,13 +3,21 @@
   "compilerOptions": {
     "strict": true,
     "jsx": "react-jsx", // React Native 专属配置，必选
-    "jsxFactory": "React.createElement", // 可选，指定JSX渲染函数
-    "jsxFragmentFactory": "React.Fragment", // 可选，指定Fragment标签
+
+    /** 删除jsxFactory和jsxFragmentFactory配置，防止报错 */
+    //"jsxFactory": "React.createElement", // 可选，指定JSX渲染函数
+    //"jsxFragmentFactory": "React.Fragment", // 可选，指定Fragment标签
     "paths": {
       "@/*": ["./*"],
       "@yisu/shared": ["../../packages/shared/src/index.ts"],
       "@yisu/shared/*": ["../../packages/shared/src/*"]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "nativewind-env.d.ts"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "nativewind-env.d.ts"
+  ]
 }
