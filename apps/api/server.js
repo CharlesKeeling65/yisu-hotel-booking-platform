@@ -9,7 +9,6 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// mysql pool
 const DB_HOST = process.env.DB_HOST || '127.0.0.1';
 const DB_PORT = process.env.DB_PORT || 3306;
 const DB_USER = process.env.DB_USER || 'root';
@@ -17,7 +16,7 @@ const DB_PASS = process.env.DB_PASS || '';
 const DB_NAME = process.env.DB_NAME || 'yisu_db';
 
 let pool;
-// helper: format Date to MySQL DATETIME `YYYY-MM-DD HH:MM:SS`
+
 function formatDateForMySQL(d = new Date()) {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -28,11 +27,15 @@ function formatDateForMySQL(d = new Date()) {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
 }
 
+function formatDateOnly(d = new Date()) {
+  return formatDateForMySQL(d).slice(0, 10);
+}
+
 function safeJsonParse(value, fallback) {
   if (value === null || value === undefined || value === '') return fallback;
   try {
     return typeof value === 'string' ? JSON.parse(value) : value;
-  } catch (e) {
+  } catch {
     return fallback;
   }
 }
@@ -42,18 +45,35 @@ function normalizeTextList(value) {
   if (typeof value === 'string') {
     const parsed = safeJsonParse(value, null);
     if (Array.isArray(parsed)) return parsed.filter(Boolean).map(String);
-    return value.split(',').map(s => s.trim()).filter(Boolean);
+    return value
+      .split(/[;,，；\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
   }
   return [];
 }
 
-function deriveRating(star) {
-  const raw = String(star || '').replace(/[^\d.]/g, '');
+function normalizeNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function parseRating(starText) {
+  const raw = String(starText || '').replace(/[^\d.]/g, '');
   const num = Number(raw);
-  if (Number.isFinite(num) && num > 0) {
-    return Math.min(5, Math.max(1, num));
-  }
-  return 4.5;
+  if (!Number.isFinite(num) || num <= 0) return 4.5;
+  return Math.min(5, Math.max(1, num));
+}
+
+function ratingToStarText(rating) {
+  const n = Math.round(normalizeNumber(rating, 4.5));
+  return `${'⭐'.repeat(Math.max(1, Math.min(5, n)))} ${n}星级`;
+}
+
+function toDateString(value) {
+  if (!value) return formatDateOnly();
+  const s = String(value).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : formatDateOnly();
 }
 
 function inferBedType(type) {
@@ -64,41 +84,164 @@ function inferBedType(type) {
   return 'Queen';
 }
 
-function buildMobileImages(coverImage) {
-  const fallback = 'https://images.unsplash.com/photo-1501117716987-c8e1ecb2105f?auto=format&fit=crop&w=1400&q=80';
-  const base = coverImage || fallback;
-  return [base];
+function stringFromJsonListOrText(value) {
+  const list = normalizeTextList(value);
+  if (list.length) return list.join(',');
+  return String(value || '');
 }
 
-function buildMobileTags(roomTypes, discounts) {
-  const list = [...normalizeTextList(roomTypes), ...normalizeTextList(discounts)];
-  const unique = [...new Set(list.filter(Boolean))];
-  return unique.length ? unique.slice(0, 5) : ['Popular', 'Business'];
+function parseAddressAddressOnly(address) {
+  return String(address || '').trim();
 }
 
-function buildMobileFacilities(scenicSpots, trafficMall) {
-  const list = [...normalizeTextList(scenicSpots), ...normalizeTextList(trafficMall)];
-  const unique = [...new Set(list.filter(Boolean))];
-  return unique.length ? unique.slice(0, 6) : ['Wifi', 'Parking', 'Restaurant'];
+function rowRoomStatusToLegacy(status, availableCount) {
+  if (Number(status) === 1 || Number(availableCount) <= 0) return 'soldout';
+  if (Number(availableCount) <= 3) return 'low';
+  return 'available';
 }
 
-function resolvePriceFrom(roomRows, priceData) {
-  if (Array.isArray(roomRows) && roomRows.length) {
-    const prices = roomRows
-      .map(r => Number(r.current || r.original || 0))
-      .filter(v => Number.isFinite(v) && v > 0);
-    if (prices.length) return Math.min(...prices);
-  }
-  const parsed = safeJsonParse(priceData, { roomPriceList: [] });
-  const list = Array.isArray(parsed?.roomPriceList) ? parsed.roomPriceList : [];
-  const prices = list
-    .map(r => Number(r.current || r.original || 0))
-    .filter(v => Number.isFinite(v) && v > 0);
-  return prices.length ? Math.min(...prices) : 0;
+function legacyStatusToRoomStatus(status, remain) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'soldout') return 1;
+  if (Number(remain) <= 0) return 1;
+  return 0;
 }
+
+function derivePriceRangeFromRooms(roomList) {
+  if (!Array.isArray(roomList) || !roomList.length) return '';
+  const prices = roomList
+    .map((r) => normalizeNumber(r.price, 0))
+    .filter((p) => p > 0)
+    .sort((a, b) => a - b);
+  if (!prices.length) return '';
+  const min = prices[0];
+  const max = prices[prices.length - 1];
+  return min === max ? `${min}元/晚` : `${min}元 - ${max}元/晚`;
+}
+
+function buildLegacyRoom(room, imageUrl) {
+  const current = normalizeNumber(room.price, 0);
+  const remain = normalizeNumber(room.available_count, 0);
+  return {
+    id: room.id,
+    hotel_id: room.hotel_id,
+    type: room.name,
+    original: current,
+    current,
+    discount: '',
+    remain,
+    status: rowRoomStatusToLegacy(room.status, remain),
+    remark: room.description || '',
+    image: imageUrl || '',
+    occupancy: normalizeNumber(room.occupancy, 2),
+    size: room.size,
+    amenities: safeJsonParse(room.amenities, []),
+    createdAt: room.created_time,
+    updatedAt: room.updated_time,
+  };
+}
+
+function buildLegacyHotel(base, audit, roomList, imageList) {
+  const scenicSpots = safeJsonParse(base.nearby_attractions, []);
+  const trafficMall = normalizeTextList(base.transportation_info);
+  const discounts = normalizeTextList(base.discount_info);
+  const roomTypes = [...new Set((roomList || []).map((r) => r.name).filter(Boolean))];
+  const priceRange = derivePriceRangeFromRooms(roomList);
+  const totalRooms = (roomList || []).reduce((sum, r) => sum + normalizeNumber(r.available_count, 0), 0);
+  const coverImage = (imageList || [])[0] || '';
+
+  return {
+    id: base.id,
+    name: base.name_cn || '',
+    nameEn: base.name_en || '',
+    star: ratingToStarText(base.star_rating),
+    openTime: base.opening_date,
+    address: base.address || '',
+    priceRange,
+    totalRooms,
+    roomTypes,
+    scenicSpots: Array.isArray(scenicSpots) ? scenicSpots : [],
+    trafficMall,
+    discounts,
+    image: coverImage,
+    images: imageList || [],
+    priceData: {
+      roomPriceList: (roomList || []).map((r) => ({
+        type: r.name,
+        original: normalizeNumber(r.price, 0),
+        current: normalizeNumber(r.price, 0),
+        remain: normalizeNumber(r.available_count, 0),
+      })),
+    },
+    createdBy: base.created_by || 'merchant',
+    createdAt: base.created_time,
+    updatedAt: base.updated_time,
+    status: audit ? Number(audit.status) : 0,
+    audit_status: audit ? Number(audit.audit_status) : 0,
+    online_status: audit ? Number(audit.online_status) : 0,
+    audit_reason: audit?.audit_reason || '',
+    auditor_id: audit?.auditor_id || '',
+    audit_time: audit?.audit_time || null,
+  };
+}
+
+function toMobileHotel(base, roomList, imageList) {
+  const prices = (roomList || []).map((r) => normalizeNumber(r.price, 0)).filter((p) => p > 0);
+  const priceFrom = prices.length ? Math.min(...prices) : 0;
+
+  return {
+    id: String(base.id),
+    name: base.name_cn || '',
+    city: base.city || (base.address ? String(base.address).slice(0, 4) : '未知'),
+    rating: normalizeNumber(base.star_rating, 4.5),
+    address: base.address || '',
+    coverImage: (imageList || [])[0] || '',
+    images: imageList || [],
+    tags: [...new Set((roomList || []).map((r) => r.name).filter(Boolean))].slice(0, 5),
+    facilities: normalizeTextList(base.discount_info).slice(0, 6),
+    priceFrom,
+    rooms: (roomList || [])
+      .map((r) => ({
+        id: String(r.id),
+        name: r.name,
+        price: normalizeNumber(r.price, 0),
+        capacity: normalizeNumber(r.occupancy, 2),
+        bedType: inferBedType(r.name),
+        breakfastIncluded: String(r.description || '').includes('早餐'),
+        refundable: true,
+      }))
+      .sort((a, b) => a.price - b.price),
+  };
+}
+
+function normalizeHotelPayload(payload) {
+  const roomTypes = normalizeTextList(payload.roomTypes);
+  const scenicSpots = normalizeTextList(payload.scenicSpots);
+  const trafficMall = normalizeTextList(payload.trafficMall);
+  const discounts = normalizeTextList(payload.discounts);
+
+  return {
+    name_cn: String(payload.name || payload.name_cn || '').trim(),
+    name_en: String(payload.nameEn || payload.name_en || '').trim(),
+    address: parseAddressAddressOnly(payload.address),
+    star_rating: parseRating(payload.star || payload.star_rating),
+    opening_date: toDateString(payload.openTime || payload.opening_date),
+    nearby_attractions: JSON.stringify(scenicSpots),
+    transportation_info: trafficMall.join(','),
+    discount_info: discounts.join(','),
+    created_by: payload.createdBy || payload.created_by || 'merchant',
+    image: String(payload.image || '').trim(),
+    roomTypes,
+  };
+}
+
 async function initDbPool() {
-  // ensure database exists: connect without database first
-  const tmpConn = await mysql.createConnection({ host: DB_HOST, port: DB_PORT, user: DB_USER, password: DB_PASS });
+  const tmpConn = await mysql.createConnection({
+    host: DB_HOST,
+    port: DB_PORT,
+    user: DB_USER,
+    password: DB_PASS,
+  });
   try {
     await tmpConn.query(`CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci`);
   } finally {
@@ -113,384 +256,676 @@ async function initDbPool() {
     database: DB_NAME,
     waitForConnections: true,
     connectionLimit: 10,
-    charset: 'utf8mb4'
+    charset: 'utf8mb4',
   });
-  // ensure schema executed if file exists
+
   const schemaPath = path.join(__dirname, 'sql', 'init_schema.sql');
   if (fs.existsSync(schemaPath)) {
     const sql = fs.readFileSync(schemaPath, 'utf8');
-    // Split statements by ; and execute sequentially
-    const stmts = sql.split(/;\s*\n/).map(s => s.trim()).filter(Boolean);
+    const stmts = sql
+      .split(/;\s*\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
     for (const s of stmts) {
-      try { await pool.query(s); } catch (e) { /* ignore individual errors */ }
-    }
-    // Ensure text columns that may hold large base64 images are LONGTEXT
-    const alterStmts = [
-      `ALTER TABLE hotels MODIFY COLUMN image LONGTEXT`,
-      `ALTER TABLE hotels MODIFY COLUMN priceData LONGTEXT`,
-      `ALTER TABLE submissions MODIFY COLUMN image LONGTEXT`,
-      `ALTER TABLE submissions MODIFY COLUMN priceData LONGTEXT`,
-      `ALTER TABLE rooms MODIFY COLUMN image LONGTEXT`
-    ];
-    for (const a of alterStmts) {
       try {
-        await pool.query(a);
-        console.log('Executed:', a);
-      } catch (e) {
-        // ignore if column/table doesn't exist or already correct
+        await pool.query(s);
+      } catch {
+        // ignore individual migration errors to keep boot tolerant
       }
     }
   }
 }
 
-// ensure data dir for uploads
+async function getHotelsWithRelations({
+  where = 'hb.is_deleted = 0',
+  params = [],
+  includeAudit = true,
+}) {
+  const selectAudit = includeAudit
+    ? ', ha.audit_status, ha.online_status, ha.status, ha.audit_reason, ha.auditor_id, ha.audit_time'
+    : '';
+  const joinAudit = includeAudit
+    ? 'LEFT JOIN hotel_audit ha ON ha.hotel_id = hb.id'
+    : '';
+
+  const [baseRows] = await pool.query(
+    `SELECT hb.* ${selectAudit}
+     FROM hotel_base hb
+     ${joinAudit}
+     WHERE ${where}
+     ORDER BY hb.created_time DESC`,
+    params
+  );
+
+  if (!baseRows.length) return [];
+
+  const hotelIds = baseRows.map((h) => h.id);
+  const placeholders = hotelIds.map(() => '?').join(',');
+
+  const [roomRows] = await pool.query(
+    `SELECT * FROM room WHERE hotel_id IN (${placeholders}) ORDER BY hotel_id, price ASC`,
+    hotelIds
+  );
+
+  const [imageRows] = await pool.query(
+    `SELECT * FROM image_storage WHERE related_type IN ('hotel', 'room') AND related_id IN (${placeholders}) ORDER BY sort ASC, id ASC`,
+    hotelIds
+  );
+
+  const roomIds = roomRows.map((r) => r.id);
+  let roomImageRows = [];
+  if (roomIds.length) {
+    const roomPlaceholders = roomIds.map(() => '?').join(',');
+    const [rows] = await pool.query(
+      `SELECT * FROM image_storage WHERE related_type = 'room' AND related_id IN (${roomPlaceholders}) ORDER BY sort ASC, id ASC`,
+      roomIds
+    );
+    roomImageRows = rows;
+  }
+
+  const roomImageMap = roomImageRows.reduce((acc, row) => {
+    if (!acc[row.related_id]) acc[row.related_id] = [];
+    acc[row.related_id].push(row.image_url);
+    return acc;
+  }, {});
+
+  const roomsMap = roomRows.reduce((acc, row) => {
+    if (!acc[row.hotel_id]) acc[row.hotel_id] = [];
+    acc[row.hotel_id].push(row);
+    return acc;
+  }, {});
+
+  const hotelImageMap = imageRows
+    .filter((r) => r.related_type === 'hotel')
+    .reduce((acc, row) => {
+      if (!acc[row.related_id]) acc[row.related_id] = [];
+      acc[row.related_id].push(row.image_url);
+      return acc;
+    }, {});
+
+  return baseRows.map((row) => {
+    const roomList = roomsMap[row.id] || [];
+    const roomWithImage = roomList.map((room) => ({
+      ...room,
+      _image: (roomImageMap[room.id] || [])[0] || '',
+    }));
+
+    return {
+      base: row,
+      audit: includeAudit
+        ? {
+            audit_status: row.audit_status,
+            online_status: row.online_status,
+            status: row.status,
+            audit_reason: row.audit_reason,
+            auditor_id: row.auditor_id,
+            audit_time: row.audit_time,
+          }
+        : null,
+      rooms: roomWithImage,
+      images: hotelImageMap[row.id] || [],
+    };
+  });
+}
+
+async function createHotelWithAudit(payload, auditInit, conn = pool) {
+  const normalized = normalizeHotelPayload(payload);
+  const [result] = await conn.query(
+    `INSERT INTO hotel_base (
+      name_cn, name_en, province, city, county, address, star_rating, opening_date,
+      nearby_attractions, transportation_info, discount_info, created_by, created_time
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      normalized.name_cn,
+      normalized.name_en,
+      '',
+      '',
+      '',
+      normalized.address,
+      normalized.star_rating,
+      normalized.opening_date,
+      normalized.nearby_attractions,
+      normalized.transportation_info,
+      normalized.discount_info,
+      normalized.created_by,
+      formatDateForMySQL(),
+    ]
+  );
+  const hotelId = result.insertId;
+
+  await conn.query(
+    `INSERT INTO hotel_audit (hotel_id, audit_status, online_status, status, audit_reason, auditor_id, audit_time)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      hotelId,
+      auditInit.audit_status,
+      auditInit.online_status,
+      auditInit.status,
+      auditInit.audit_reason || null,
+      auditInit.auditor_id || null,
+      auditInit.audit_time || null,
+    ]
+  );
+
+  if (normalized.image) {
+    await conn.query(
+      `INSERT INTO image_storage (related_type, related_id, image_url, sort) VALUES ('hotel', ?, ?, 0)`,
+      [hotelId, normalized.image]
+    );
+  }
+
+  return hotelId;
+}
+
 const dataDir = path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
-
-// serve static frontend files from workspace root
 app.use('/', express.static(path.join(__dirname)));
 
-// multer for image upload (if frontend later posts images)
 const upload = multer({ dest: path.join(dataDir, 'uploads/') });
+void upload;
 
-// -------------------- Hotels API --------------------
 app.get('/api/hotels', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM hotels');
-    const parsed = rows.map(r => ({
-      ...r,
-      roomTypes: r.roomTypes ? JSON.parse(r.roomTypes) : [],
-      scenicSpots: r.scenicSpots ? JSON.parse(r.scenicSpots) : [],
-      trafficMall: r.trafficMall ? JSON.parse(r.trafficMall) : [],
-      discounts: r.discounts ? JSON.parse(r.discounts) : [],
-      priceData: r.priceData ? JSON.parse(r.priceData) : { roomPriceList: [] }
-    }));
-    res.json({ code:200, data: parsed });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    const rows = await getHotelsWithRelations({
+      where: 'hb.is_deleted = 0 AND ha.audit_status = 1',
+    });
+
+    const data = rows.map((item) => buildLegacyHotel(item.base, item.audit, item.rooms, item.images));
+    res.json({ code: 200, data });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
 app.get('/api/hotels/:id', async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = Number(req.params.id);
   try {
-    const [rows] = await pool.query('SELECT * FROM hotels WHERE id = ?', [id]);
+    const rows = await getHotelsWithRelations({
+      where: 'hb.id = ? AND hb.is_deleted = 0',
+      params: [id],
+    });
     const row = rows[0];
-    if (!row) return res.status(404).json({ code:404, msg: 'not found' });
-    const parsed = { ...row, roomTypes: row.roomTypes ? JSON.parse(row.roomTypes) : [], scenicSpots: row.scenicSpots ? JSON.parse(row.scenicSpots) : [], trafficMall: row.trafficMall ? JSON.parse(row.trafficMall) : [], discounts: row.discounts ? JSON.parse(row.discounts) : [], priceData: row.priceData ? JSON.parse(row.priceData) : { roomPriceList: [] } };
-    res.json({ code:200, data: parsed });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    if (!row) return res.status(404).json({ code: 404, msg: 'not found' });
+
+    const data = buildLegacyHotel(row.base, row.audit, row.rooms, row.images);
+    res.json({ code: 200, data });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
 app.post('/api/hotels', async (req, res) => {
   const payload = req.body || {};
-  // normalize list fields: accept comma-separated strings from frontend
-  function normalizeList(v) {
-    if (!v && v !== 0) return [];
-    if (Array.isArray(v)) return v;
-    if (typeof v === 'string') return v.split(',').map(s => s.trim()).filter(Boolean);
-    return [];
-  }
-  const roomTypesVal = normalizeList(payload.roomTypes);
-  const scenicSpotsVal = normalizeList(payload.scenicSpots);
-  const trafficMallVal = normalizeList(payload.trafficMall);
-  const discountsVal = normalizeList(payload.discounts);
-  const now = formatDateForMySQL();
   try {
-    console.log('/api/hotels POST payload:', JSON.stringify(payload).slice(0,2000));
-    const [result] = await pool.query('INSERT INTO hotels (name,nameEn,star,openTime,address,priceRange,totalRooms,roomTypes,scenicSpots,trafficMall,discounts,image,priceData,createdBy,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [payload.name||'', payload.nameEn||'', payload.star||'', payload.openTime||'', payload.address||'', payload.priceRange||'', payload.totalRooms||0, JSON.stringify(roomTypesVal), JSON.stringify(scenicSpotsVal), JSON.stringify(trafficMallVal), JSON.stringify(discountsVal), payload.image||'', JSON.stringify(payload.priceData||{roomPriceList:[]}), payload.createdBy||'user', now]);
-    console.log('/api/hotels inserted id:', result && result.insertId);
-    const insertId = result.insertId;
-    const [rows] = await pool.query('SELECT * FROM hotels WHERE id = ?', [insertId]);
-    const row = rows[0] || null;
-    if (row) {
-      const parsed = {
-        ...row,
-        roomTypes: row.roomTypes ? JSON.parse(row.roomTypes) : [],
-        scenicSpots: row.scenicSpots ? JSON.parse(row.scenicSpots) : [],
-        trafficMall: row.trafficMall ? JSON.parse(row.trafficMall) : [],
-        discounts: row.discounts ? JSON.parse(row.discounts) : [],
-        priceData: row.priceData ? JSON.parse(row.priceData) : { roomPriceList: [] }
-      };
-      res.json({ code:200, data: parsed });
-    } else {
-      res.json({ code:500, msg: 'failed to fetch created hotel' });
-    }
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    const hotelId = await createHotelWithAudit(payload, {
+      audit_status: 1,
+      online_status: 1,
+      status: 1,
+      audit_time: formatDateForMySQL(),
+    });
+
+    const rows = await getHotelsWithRelations({
+      where: 'hb.id = ? AND hb.is_deleted = 0',
+      params: [hotelId],
+    });
+
+    res.json({ code: 200, data: buildLegacyHotel(rows[0].base, rows[0].audit, rows[0].rooms, rows[0].images) });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
 app.put('/api/hotels/:id', async (req, res) => {
-  const id = parseInt(req.params.id);
-  const p = req.body || {};
-  function normalizeList(v) {
-    if (!v && v !== 0) return [];
-    if (Array.isArray(v)) return v;
-    if (typeof v === 'string') return v.split(',').map(s => s.trim()).filter(Boolean);
-    return [];
-  }
-  const roomTypesVal = normalizeList(p.roomTypes);
-  const scenicSpotsVal = normalizeList(p.scenicSpots);
-  const trafficMallVal = normalizeList(p.trafficMall);
-  const discountsVal = normalizeList(p.discounts);
+  const id = Number(req.params.id);
+  const payload = req.body || {};
+  const normalized = normalizeHotelPayload(payload);
+
   try {
-    console.log(`/api/hotels/${id} PUT payload:`, JSON.stringify(p).slice(0,2000));
-    await pool.query('UPDATE hotels SET name=?,nameEn=?,star=?,openTime=?,address=?,priceRange=?,totalRooms=?,roomTypes=?,scenicSpots=?,trafficMall=?,discounts=?,image=?,priceData=? WHERE id=?', [p.name||'', p.nameEn||'', p.star||'', p.openTime||'', p.address||'', p.priceRange||'', p.totalRooms||0, JSON.stringify(roomTypesVal), JSON.stringify(scenicSpotsVal), JSON.stringify(trafficMallVal), JSON.stringify(discountsVal), p.image||'', JSON.stringify(p.priceData||{roomPriceList:[]}), id]);
-    console.log(`/api/hotels/${id} updated`);
-    const [rows] = await pool.query('SELECT * FROM hotels WHERE id = ?', [id]);
-    const row = rows[0] || null;
-    if (row) {
-      const parsed = {
-        ...row,
-        roomTypes: row.roomTypes ? JSON.parse(row.roomTypes) : [],
-        scenicSpots: row.scenicSpots ? JSON.parse(row.scenicSpots) : [],
-        trafficMall: row.trafficMall ? JSON.parse(row.trafficMall) : [],
-        discounts: row.discounts ? JSON.parse(row.discounts) : [],
-        priceData: row.priceData ? JSON.parse(row.priceData) : { roomPriceList: [] }
-      };
-      res.json({ code:200, data: parsed });
-    } else {
-      res.json({ code:404, msg: 'hotel not found' });
+    await pool.query(
+      `UPDATE hotel_base
+       SET name_cn = ?, name_en = ?, address = ?, star_rating = ?, opening_date = ?,
+           nearby_attractions = ?, transportation_info = ?, discount_info = ?, updated_time = NOW()
+       WHERE id = ?`,
+      [
+        normalized.name_cn,
+        normalized.name_en,
+        normalized.address,
+        normalized.star_rating,
+        normalized.opening_date,
+        normalized.nearby_attractions,
+        normalized.transportation_info,
+        normalized.discount_info,
+        id,
+      ]
+    );
+
+    if (normalized.image) {
+      await pool.query('DELETE FROM image_storage WHERE related_type = ? AND related_id = ? AND sort = 0', ['hotel', id]);
+      await pool.query(
+        `INSERT INTO image_storage (related_type, related_id, image_url, sort) VALUES ('hotel', ?, ?, 0)`,
+        [id, normalized.image]
+      );
     }
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+
+    const rows = await getHotelsWithRelations({
+      where: 'hb.id = ? AND hb.is_deleted = 0',
+      params: [id],
+    });
+    const row = rows[0];
+    if (!row) return res.status(404).json({ code: 404, msg: 'hotel not found' });
+
+    res.json({ code: 200, data: buildLegacyHotel(row.base, row.audit, row.rooms, row.images) });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
 app.delete('/api/hotels/:id', async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = Number(req.params.id);
   try {
-    await pool.query('DELETE FROM rooms WHERE hotel_id = ?', [id]);
-    await pool.query('DELETE FROM orders WHERE hotel_id = ?', [id]);
-    await pool.query('DELETE FROM hotels WHERE id = ?', [id]);
-    res.json({ code:200, msg:'deleted' });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    await pool.query('UPDATE hotel_base SET is_deleted = 1, updated_time = NOW() WHERE id = ?', [id]);
+    await pool.query('UPDATE hotel_audit SET online_status = 0, status = 2, updated_time = NOW() WHERE hotel_id = ?', [id]);
+    res.json({ code: 200, msg: 'offline success' });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
-// -------------------- Rooms API --------------------
-app.get('/api/hotels/:id/rooms', async (req, res) => {
-  const id = parseInt(req.params.id);
+app.post('/api/hotels/:id/restore', async (req, res) => {
+  const id = Number(req.params.id);
   try {
-    const [rows] = await pool.query('SELECT * FROM rooms WHERE hotel_id = ?', [id]);
-    res.json({ code:200, data: rows });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    await pool.query('UPDATE hotel_base SET is_deleted = 0, updated_time = NOW() WHERE id = ?', [id]);
+    await pool.query('UPDATE hotel_audit SET online_status = 1, status = 1, updated_time = NOW() WHERE hotel_id = ?', [id]);
+    res.json({ code: 200, msg: 'restored' });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
+});
+
+app.get('/api/hotels/:id/rooms', async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const [rows] = await pool.query('SELECT * FROM room WHERE hotel_id = ? ORDER BY price ASC', [id]);
+    const roomIds = rows.map((r) => r.id);
+    let imageRows = [];
+    if (roomIds.length) {
+      const placeholders = roomIds.map(() => '?').join(',');
+      const [tmp] = await pool.query(
+        `SELECT * FROM image_storage WHERE related_type = 'room' AND related_id IN (${placeholders}) ORDER BY sort ASC, id ASC`,
+        roomIds
+      );
+      imageRows = tmp;
+    }
+
+    const imageMap = imageRows.reduce((acc, r) => {
+      if (!acc[r.related_id]) acc[r.related_id] = [];
+      acc[r.related_id].push(r.image_url);
+      return acc;
+    }, {});
+
+    const data = rows.map((r) => buildLegacyRoom(r, (imageMap[r.id] || [])[0] || ''));
+    res.json({ code: 200, data });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
 app.post('/api/hotels/:id/rooms', async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = Number(req.params.id);
   const p = req.body || {};
+  const price = normalizeNumber(p.current ?? p.price, 0);
+  const remain = normalizeNumber(p.remain ?? p.available_count, 0);
+
   try {
-    const [result] = await pool.query('INSERT INTO rooms (hotel_id,type,original,current,discount,remain,status,remark,image) VALUES (?,?,?,?,?,?,?,?,?)', [id, p.type||'', p.original||0, p.current||0, p.discount||'', p.remain||0, p.status||'available', p.remark||'', p.image||'']);
-    const [rows] = await pool.query('SELECT * FROM rooms WHERE id = ?', [result.insertId]);
-    res.json({ code:200, data: rows[0] });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    const [result] = await pool.query(
+      `INSERT INTO room (hotel_id, name, description, price, available_count, occupancy, size, amenities, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        p.type || p.name || '标准房',
+        p.remark || p.description || '',
+        price,
+        remain,
+        normalizeNumber(p.occupancy, 2),
+        p.size ? normalizeNumber(p.size, null) : null,
+        JSON.stringify(normalizeTextList(p.amenities || [])),
+        legacyStatusToRoomStatus(p.status, remain),
+      ]
+    );
+
+    if (p.image) {
+      await pool.query(
+        `INSERT INTO image_storage (related_type, related_id, image_url, sort) VALUES ('room', ?, ?, 0)`,
+        [result.insertId, p.image]
+      );
+    }
+
+    const [rows] = await pool.query('SELECT * FROM room WHERE id = ?', [result.insertId]);
+    const [imageRows] = await pool.query(
+      `SELECT image_url FROM image_storage WHERE related_type = 'room' AND related_id = ? ORDER BY sort ASC, id ASC LIMIT 1`,
+      [result.insertId]
+    );
+
+    res.json({ code: 200, data: buildLegacyRoom(rows[0], imageRows[0]?.image_url || '') });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
 app.put('/api/hotels/:id/rooms/:roomId', async (req, res) => {
-  const roomId = parseInt(req.params.roomId);
+  const roomId = Number(req.params.roomId);
   const p = req.body || {};
+  const price = normalizeNumber(p.current ?? p.price, 0);
+  const remain = normalizeNumber(p.remain ?? p.available_count, 0);
+
   try {
-    await pool.query('UPDATE rooms SET type=?,original=?,current=?,discount=?,remain=?,status=?,remark=?,image=? WHERE id=?', [p.type||'', p.original||0, p.current||0, p.discount||'', p.remain||0, p.status||'available', p.remark||'', p.image||'', roomId]);
-    const [rows] = await pool.query('SELECT * FROM rooms WHERE id = ?', [roomId]);
-    res.json({ code:200, data: rows[0] });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    await pool.query(
+      `UPDATE room
+       SET name = ?, description = ?, price = ?, available_count = ?, occupancy = ?, size = ?, amenities = ?, status = ?, updated_time = NOW()
+       WHERE id = ?`,
+      [
+        p.type || p.name || '标准房',
+        p.remark || p.description || '',
+        price,
+        remain,
+        normalizeNumber(p.occupancy, 2),
+        p.size ? normalizeNumber(p.size, null) : null,
+        JSON.stringify(normalizeTextList(p.amenities || [])),
+        legacyStatusToRoomStatus(p.status, remain),
+        roomId,
+      ]
+    );
+
+    if (p.image) {
+      await pool.query('DELETE FROM image_storage WHERE related_type = ? AND related_id = ? AND sort = 0', ['room', roomId]);
+      await pool.query(
+        `INSERT INTO image_storage (related_type, related_id, image_url, sort) VALUES ('room', ?, ?, 0)`,
+        [roomId, p.image]
+      );
+    }
+
+    const [rows] = await pool.query('SELECT * FROM room WHERE id = ?', [roomId]);
+    const [imageRows] = await pool.query(
+      `SELECT image_url FROM image_storage WHERE related_type = 'room' AND related_id = ? ORDER BY sort ASC, id ASC LIMIT 1`,
+      [roomId]
+    );
+
+    res.json({ code: 200, data: buildLegacyRoom(rows[0], imageRows[0]?.image_url || '') });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
+});
+
+app.put('/api/hotels/:id/rooms/bulk', async (req, res) => {
+  const hotelId = Number(req.params.id);
+  const rooms = Array.isArray(req.body?.rooms) ? req.body.rooms : [];
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query('DELETE FROM image_storage WHERE related_type = ? AND related_id IN (SELECT id FROM room WHERE hotel_id = ?)', ['room', hotelId]);
+    await conn.query('DELETE FROM room WHERE hotel_id = ?', [hotelId]);
+
+    for (const item of rooms) {
+      const price = normalizeNumber(item.current ?? item.price, 0);
+      const remain = normalizeNumber(item.remain ?? item.available_count, 0);
+      const [r] = await conn.query(
+        `INSERT INTO room (hotel_id, name, description, price, available_count, occupancy, size, amenities, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          hotelId,
+          item.type || item.name || '标准房',
+          item.remark || item.description || '',
+          price,
+          remain,
+          normalizeNumber(item.occupancy, 2),
+          item.size ? normalizeNumber(item.size, null) : null,
+          JSON.stringify(normalizeTextList(item.amenities || [])),
+          legacyStatusToRoomStatus(item.status, remain),
+        ]
+      );
+      if (item.image) {
+        await conn.query(
+          `INSERT INTO image_storage (related_type, related_id, image_url, sort) VALUES ('room', ?, ?, 0)`,
+          [r.insertId, item.image]
+        );
+      }
+    }
+
+    await conn.commit();
+    res.json({ code: 200, msg: 'rooms updated' });
+  } catch (e) {
+    await conn.rollback();
+    res.status(500).json({ code: 500, msg: e.message });
+  } finally {
+    conn.release();
+  }
 });
 
 app.delete('/api/hotels/:id/rooms/:roomId', async (req, res) => {
-  const roomId = parseInt(req.params.roomId);
+  const roomId = Number(req.params.roomId);
   try {
-    await pool.query('DELETE FROM rooms WHERE id = ?', [roomId]);
-    res.json({ code:200, msg:'deleted' });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    await pool.query('DELETE FROM image_storage WHERE related_type = ? AND related_id = ?', ['room', roomId]);
+    await pool.query('DELETE FROM room WHERE id = ?', [roomId]);
+    res.json({ code: 200, msg: 'deleted' });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
-// -------------------- Mobile API --------------------
 app.get('/api/mobile/hotels', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM hotels');
-    if (!rows.length) return res.json({ code:200, data: [] });
-
-    const ids = rows.map(r => r.id).filter(Boolean);
-    let roomMinMap = {};
-    if (ids.length) {
-      const placeholders = ids.map(() => '?').join(',');
-      const [roomMins] = await pool.query(
-        `SELECT hotel_id, MIN(CASE WHEN current > 0 THEN current ELSE original END) AS minPrice FROM rooms WHERE hotel_id IN (${placeholders}) GROUP BY hotel_id`,
-        ids
-      );
-      roomMinMap = roomMins.reduce((acc, row) => {
-        acc[row.hotel_id] = row.minPrice;
-        return acc;
-      }, {});
-    }
-
-    const data = rows.map(r => {
-      const coverImage = r.image || '';
-      return {
-        id: String(r.id),
-        name: r.name || '',
-        city: r.address ? String(r.address).split(' ')[0] : '未知',
-        rating: deriveRating(r.star),
-        address: r.address || '',
-        coverImage: coverImage || buildMobileImages('')[0],
-        images: buildMobileImages(coverImage),
-        tags: buildMobileTags(r.roomTypes, r.discounts),
-        facilities: buildMobileFacilities(r.scenicSpots, r.trafficMall),
-        priceFrom: Number(roomMinMap[r.id] || resolvePriceFrom([], r.priceData) || 0),
-        rooms: []
-      };
+    const rows = await getHotelsWithRelations({
+      where: 'hb.is_deleted = 0 AND ha.audit_status = 1 AND ha.online_status = 1',
     });
 
-    res.json({ code:200, data });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    const data = rows.map((item) => toMobileHotel(item.base, item.rooms, item.images));
+    res.json({ code: 200, data });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
 app.get('/api/mobile/hotels/:id', async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = Number(req.params.id);
   try {
-    const [rows] = await pool.query('SELECT * FROM hotels WHERE id = ?', [id]);
+    const rows = await getHotelsWithRelations({
+      where: 'hb.id = ? AND hb.is_deleted = 0 AND ha.audit_status = 1 AND ha.online_status = 1',
+      params: [id],
+    });
+
     const row = rows[0];
-    if (!row) return res.status(404).json({ code:404, msg:'not found' });
-
-    const [roomRows] = await pool.query('SELECT * FROM rooms WHERE hotel_id = ?', [id]);
-    const rooms = roomRows.map(r => ({
-      id: String(r.id),
-      name: r.type || 'Standard',
-      price: Number(r.current || r.original || 0),
-      capacity: 2,
-      bedType: inferBedType(r.type),
-      breakfastIncluded: false,
-      refundable: false
-    }));
-
-    const coverImage = row.image || '';
-    const data = {
-      id: String(row.id),
-      name: row.name || '',
-      city: row.address ? String(row.address).split(' ')[0] : '未知',
-      rating: deriveRating(row.star),
-      address: row.address || '',
-      coverImage: coverImage || buildMobileImages('')[0],
-      images: buildMobileImages(coverImage),
-      tags: buildMobileTags(row.roomTypes, row.discounts),
-      facilities: buildMobileFacilities(row.scenicSpots, row.trafficMall),
-      priceFrom: resolvePriceFrom(roomRows, row.priceData),
-      rooms
-    };
-
-    res.json({ code:200, data });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    if (!row) return res.status(404).json({ code: 404, msg: 'not found' });
+    res.json({ code: 200, data: toMobileHotel(row.base, row.rooms, row.images) });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
 app.post('/api/mobile/login', async (req, res) => {
   const { username, password } = req.body || {};
   if (username === 'mobile' && password === '123456') {
     const token = `mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    return res.json({ code:200, data: { token, user: { username: 'mobile', name: '移动端用户' } } });
+    return res.json({ code: 200, data: { token, user: { username: 'mobile', name: '移动端用户' } } });
   }
-  return res.status(401).json({ code:401, msg:'invalid credentials' });
+  return res.status(401).json({ code: 401, msg: 'invalid credentials' });
 });
 
-// -------------------- Submissions (merchant) --------------------
 app.get('/api/submissions', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM submissions');
-    const parsed = rows.map(r => ({ ...r, priceData: r.priceData ? JSON.parse(r.priceData) : { roomPriceList: [] } }));
-    res.json({ code:200, data: parsed });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    const rows = await getHotelsWithRelations({
+      where: 'hb.is_deleted = 0 AND ha.audit_status = 0',
+    });
+
+    const data = rows.map((item) => buildLegacyHotel(item.base, item.audit, item.rooms, item.images));
+    res.json({ code: 200, data });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
 app.post('/api/submissions', async (req, res) => {
-  const p = req.body || {};
-  const now = formatDateForMySQL();
+  const payload = req.body || {};
   try {
-    const [result] = await pool.query('INSERT INTO submissions (name,nameEn,star,openTime,address,priceRange,totalRooms,roomTypes,scenicSpots,trafficMall,discounts,image,priceData,createdBy,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [p.name||'', p.nameEn||'', p.star||'', p.openTime||'', p.address||'', p.priceRange||'', p.totalRooms||0, JSON.stringify(p.roomTypes||[]), JSON.stringify(p.scenicSpots||[]), JSON.stringify(p.trafficMall||[]), JSON.stringify(p.discounts||[]), p.image||'', JSON.stringify(p.priceData||{roomPriceList:[]}), p.createdBy||'user', now]);
-    const [rows] = await pool.query('SELECT * FROM submissions WHERE id = ?', [result.insertId]);
-    res.json({ code:200, data: rows[0] });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    const hotelId = await createHotelWithAudit(payload, {
+      audit_status: 0,
+      online_status: 0,
+      status: 0,
+      audit_time: null,
+    });
+
+    const rows = await getHotelsWithRelations({
+      where: 'hb.id = ?',
+      params: [hotelId],
+    });
+
+    res.json({ code: 200, data: buildLegacyHotel(rows[0].base, rows[0].audit, rows[0].rooms, rows[0].images) });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
 app.post('/api/submissions/:id/approve', async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = Number(req.params.id);
   try {
-    const [subs] = await pool.query('SELECT * FROM submissions WHERE id = ?', [id]);
-    const sub = subs[0];
-    if (!sub) return res.status(404).json({ code:404, msg:'submission not found' });
-    const now = formatDateForMySQL();
-    const [result] = await pool.query('INSERT INTO hotels (name,nameEn,star,openTime,address,priceRange,totalRooms,roomTypes,scenicSpots,trafficMall,discounts,image,priceData,createdBy,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [sub.name, sub.nameEn, sub.star, sub.openTime, sub.address, sub.priceRange, sub.totalRooms, sub.roomTypes, sub.scenicSpots, sub.trafficMall, sub.discounts, sub.image, sub.priceData, sub.createdBy||'merchant', now]);
-    await pool.query('DELETE FROM submissions WHERE id = ?', [id]);
-    const [rows] = await pool.query('SELECT * FROM hotels WHERE id = ?', [result.insertId]);
-    res.json({ code:200, data: rows[0] });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    await pool.query(
+      `UPDATE hotel_audit
+       SET audit_status = 1, online_status = 1, status = 1, audit_time = ?, audit_reason = NULL, updated_time = NOW()
+       WHERE hotel_id = ?`,
+      [formatDateForMySQL(), id]
+    );
+
+    const rows = await getHotelsWithRelations({
+      where: 'hb.id = ? AND hb.is_deleted = 0',
+      params: [id],
+    });
+    const row = rows[0];
+    if (!row) return res.status(404).json({ code: 404, msg: 'submission not found' });
+
+    res.json({ code: 200, data: buildLegacyHotel(row.base, row.audit, row.rooms, row.images) });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
 app.post('/api/submissions/:id/reject', async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = Number(req.params.id);
+  const reason = String(req.body?.reason || '').trim();
   try {
-    await pool.query('DELETE FROM submissions WHERE id = ?', [id]);
-    res.json({ code:200, msg:'rejected' });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    await pool.query(
+      `UPDATE hotel_audit
+       SET audit_status = 2, online_status = 0, status = 3, audit_reason = ?, audit_time = ?, updated_time = NOW()
+       WHERE hotel_id = ?`,
+      [reason || '审核未通过', formatDateForMySQL(), id]
+    );
+    res.json({ code: 200, msg: 'rejected' });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
-// -------------------- Orders --------------------
 app.get('/api/orders/:hotelId', async (req, res) => {
-  const hotelId = parseInt(req.params.hotelId);
+  const hotelId = Number(req.params.hotelId);
   try {
-    const [rows] = await pool.query('SELECT * FROM orders WHERE hotel_id = ?', [hotelId]);
-    res.json({ code:200, data: rows });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+    const [rows] = await pool.query('SELECT * FROM orders WHERE hotel_id = ? ORDER BY created_at DESC', [hotelId]);
+    const data = rows.map((o) => ({
+      id: o.id,
+      hotel_id: o.hotel_id,
+      orderNo: o.order_no,
+      room: o.room,
+      type: o.type,
+      guest: o.guest,
+      phone: o.phone,
+      amount: String(o.amount),
+      status: o.status,
+      leaveDate: o.leave_date,
+      payType: o.pay_type,
+      createdAt: o.created_at,
+    }));
+    res.json({ code: 200, data });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
 app.put('/api/orders/:hotelId', async (req, res) => {
-  const hotelId = parseInt(req.params.hotelId);
-  const list = req.body || [];
+  const hotelId = Number(req.params.hotelId);
+  const list = Array.isArray(req.body) ? req.body : [];
+
+  const conn = await pool.getConnection();
   try {
-    await pool.query('DELETE FROM orders WHERE hotel_id = ?', [hotelId]);
-    const now = formatDateForMySQL();
+    await conn.beginTransaction();
+    await conn.query('DELETE FROM orders WHERE hotel_id = ?', [hotelId]);
+
     for (const o of list) {
-      await pool.query('INSERT INTO orders (hotel_id,orderNo,room,type,guest,phone,amount,status,leaveDate,payType,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?,?)', [hotelId, o.orderNo||'', o.room||'', o.type||'', o.guest||'', o.phone||'', o.amount||'', o.status||'unchecked', o.leave||'', o.payType||'', now]);
+      await conn.query(
+        `INSERT INTO orders (hotel_id, order_no, room, type, guest, phone, amount, status, leave_date, pay_type, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          hotelId,
+          o.orderNo || '',
+          o.room || '',
+          o.type || '',
+          o.guest || '',
+          o.phone || '',
+          normalizeNumber(o.amount, 0),
+          o.status || 'unchecked',
+          toDateString(o.leave || o.leaveDate),
+          o.payType || '',
+          formatDateForMySQL(),
+        ]
+      );
     }
-    res.json({ code:200, msg:'orders updated' });
-  } catch (e) { res.status(500).json({ code:500, msg: e.message }); }
+
+    await conn.commit();
+    res.json({ code: 200, msg: 'orders updated' });
+  } catch (e) {
+    await conn.rollback();
+    res.status(500).json({ code: 500, msg: e.message });
+  } finally {
+    conn.release();
+  }
 });
 
-// -------------------- start server --------------------
-// start server after db initialized
 async function startServerWithRetry(startPort, maxAttempts = 5) {
   let port = startPort;
-  for (let i = 0; i < maxAttempts; i++) {
+  for (let i = 0; i < maxAttempts; i += 1) {
     try {
       await new Promise((resolve, reject) => {
         const server = app.listen(port, () => {
           console.log(`Server listening on http://localhost:${port}`);
           resolve();
         });
-        server.on('error', (err) => {
-          reject(err);
-        });
+        server.on('error', (err) => reject(err));
       });
       return port;
     } catch (err) {
       if (err && err.code === 'EADDRINUSE') {
         console.warn(`Port ${port} in use, trying ${port + 1}...`);
-        port = port + 1;
+        port += 1;
         continue;
       }
-      console.error('Failed to start server:', err);
       throw err;
     }
   }
   throw new Error('Unable to bind server to any port');
 }
 
-initDbPool().then(async () => {
-  try {
-    const usedPort = await startServerWithRetry(PORT, 8);
-    console.log(`Server started on port ${usedPort}`);
-  } catch (err) {
-    console.error('Failed to start server after retries:', err);
+initDbPool()
+  .then(async () => {
+    try {
+      const usedPort = await startServerWithRetry(PORT, 8);
+      console.log(`Server started on port ${usedPort}`);
+    } catch (err) {
+      console.error('Failed to start server after retries:', err);
+      process.exit(1);
+    }
+  })
+  .catch((err) => {
+    console.error('Failed to initialize DB pool:', err);
     process.exit(1);
-  }
-}).catch(err=>{
-  console.error('Failed to initialize DB pool:', err);
-  process.exit(1);
-});
+  });
