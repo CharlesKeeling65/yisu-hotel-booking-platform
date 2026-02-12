@@ -47,3 +47,4 @@ app-example
 .worktrees
 apps/api/.env
 .next/
+.codex
