@@ -1,8 +1,7 @@
 import React, { useEffect } from 'react'
-import { Routes, Route, Link, useNavigate } from 'react-router-dom'
-import Home from './pages/Home'
+import { Routes, Route, useNavigate } from 'react-router-dom'
 import Login from './pages/Login'
-import Admin from './pages/Admin'
+import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import HotelDetail from './pages/HotelDetail'
 import HotelEdit from './pages/HotelEdit'
@@ -31,7 +30,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<RedirectToLogin/>} />
           <Route path="/login" element={<Login/>} />
-          <Route path="/admin" element={<Admin/>} />
+          <Route path="/register" element={<Register/>} />
           <Route path="/dashboard" element={<Dashboard/>} />
           <Route path="/hotels/:id" element={<HotelDetail/>} />
           <Route path="/hotels/:id/edit" element={<HotelEdit/>} />

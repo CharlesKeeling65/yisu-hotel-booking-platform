@@ -1,51 +1,55 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import '../styles/login.css'
 
+async function sha256Hex(text) {
+  const data = new TextEncoder().encode(text)
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 export default function Login(){
-  const modalRef = useRef(null)
-  useEffect(()=>{
-    const loginForm = document.getElementById('loginForm')
-    const errorModal = document.getElementById('errorModal')
-    const closeModal = document.getElementById('closeModal')
-    const DEFAULT_USER = 'user'
-    const DEFAULT_ADMIN = 'admin'
-    const DEFAULT_PWD = '123456'
+  const navigate = useNavigate()
+  const [identifier, setIdentifier] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-    function onSubmit(e){
-      e.preventDefault()
-      const username = document.getElementById('username').value.trim()
-      const password = document.getElementById('password').value.trim()
-      if (username === DEFAULT_USER && password === DEFAULT_PWD) {
-        sessionStorage.setItem('role', 'user')
-        sessionStorage.setItem('username', username)
-        window.location.href = '/dashboard'
-      } else if (username === DEFAULT_ADMIN && password === DEFAULT_PWD) {
-        sessionStorage.setItem('role', 'admin')
-        sessionStorage.setItem('username', username)
-        window.location.href = '/admin'
-      } else {
-        if (errorModal) errorModal.style.display = 'flex'
-      }
+  async function onSubmit(e){
+    e.preventDefault()
+    setError('')
+    if (!identifier || !password) {
+      setError('请输入账号与密码')
+      return
     }
 
-    function onClose(){ if (errorModal) errorModal.style.display = 'none' }
+    setLoading(true)
+    try {
+      const passwordCipher = await sha256Hex(password)
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier, passwordCipher }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(json?.msg || '登录失败')
 
-    if (loginForm) loginForm.addEventListener('submit', onSubmit)
-    if (closeModal) closeModal.addEventListener('click', onClose)
-    function onWindowClick(e){ if (e.target === errorModal) onClose() }
-    window.addEventListener('click', onWindowClick)
-
-    return ()=>{
-      if (loginForm) loginForm.removeEventListener('submit', onSubmit)
-      if (closeModal) closeModal.removeEventListener('click', onClose)
-      window.removeEventListener('click', onWindowClick)
+      const user = json?.data?.user
+      if (!user) throw new Error('登录结果异常')
+      localStorage.setItem('authUser', JSON.stringify(user))
+      localStorage.setItem('authToken', json?.data?.token || '')
+      navigate('/dashboard')
+    } catch (err) {
+      setError(err?.message || '登录失败')
+    } finally {
+      setLoading(false)
     }
-  }, [])
+  }
 
   return (
     <div className="login-page">
       <div className="top-bar">
-        <div>旅游酒店商家管理后台</div>
+        <div>易宿酒店平台</div>
         <div className="lang-switch">简体中文</div>
       </div>
 
@@ -53,53 +57,40 @@ export default function Login(){
         <div className="login-form">
           <div className="logo">
             <div className="logo-icon">🏨</div>
-            <span>易宿</span>
+            <span>易宿登录</span>
           </div>
-          <form id="loginForm">
+          <form onSubmit={onSubmit}>
             <div className="form-group">
-              <input 
-                type="text" 
-                id="username" 
-                placeholder="输入用户名" 
-                required 
+              <input
+                type="text"
+                placeholder="账号 / 邮箱 / ID"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                required
               />
             </div>
             <div className="form-group">
-              <input 
-                type="password" 
-                id="password" 
-                placeholder="输入密码" 
-                required 
+              <input
+                type="password"
+                placeholder="密码"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
               />
             </div>
-            <div className="forgot-pwd">忘记密码?</div>
-            <button type="submit" className="login-btn">登录</button>
+            {error ? <div className="form-error">{error}</div> : null}
+            <button type="submit" className="login-btn" disabled={loading}>{loading ? '登录中...' : '登录'}</button>
           </form>
-          <div className="divider">或通过以下方式</div>
-          <div className="other-login">
-            <button className="other-btn">📱 短信验证码</button>
-            <button className="other-btn">📧 邮箱验证码</button>
-          </div>
-          <div className="wechat-login">💬 使用微信扫一扫登录</div>
-          <div className="privacy">
-            登录或注册表示同意我们的 <a href="#" className="privacy-link">隐私政策</a>
-          </div>
+
+          <div className="divider">还没有账号？</div>
+          <Link to="/register" className="secondary-link">去注册（需选择角色）</Link>
+          <div className="privacy">登录成功后系统将自动识别并进入对应角色工作台</div>
         </div>
 
         <div className="login-banner">
-          <p className="banner-welcome">欢迎使用易宿 ebooking</p>
-          <h2 className="banner-title">您的酒店管理专家</h2>
-          <p className="banner-desc">
-            易宿酒店商家管理系统为各类型酒店提供客源拓展、接待经营、口碑维护、数据指导、宣传营销、客户管理等一站式解决方案
-          </p>
-          <button className="register-btn">立即入驻 &gt;</button>
-        </div>
-      </div>
-
-      <div className="modal" id="errorModal" ref={modalRef}>
-        <div className="modal-content">
-          <p>用户名或密码错误，请重新输入！</p>
-          <button className="modal-btn" id="closeModal">确定</button>
+          <p className="banner-welcome">欢迎使用易宿 eBooking</p>
+          <h2 className="banner-title">商家录入 · 管理员审核 · 用户查询一体化</h2>
+          <p className="banner-desc">覆盖酒店录入、审核发布、上/下线、用户查询与详情展示全流程。</p>
         </div>
       </div>
     </div>
