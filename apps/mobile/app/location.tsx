@@ -22,7 +22,15 @@ const SUGGESTIONS = [
 export default function LocationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { city } = useLocalSearchParams<{ city?: string }>();
+  const { city, location, from, checkIn, checkOut, priceStar, tags } = useLocalSearchParams<{
+    city?: string;
+    location?: string;
+    from?: "home" | "list";
+    checkIn?: string;
+    checkOut?: string;
+    priceStar?: string;
+    tags?: string;
+  }>();
   const inputRef = useRef<TextInput>(null);
   const [keyword, setKeyword] = useState("");
   const [historyItems, setHistoryItems] = useState(HISTORY_ITEMS);
@@ -36,22 +44,44 @@ export default function LocationScreen() {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    if (typeof location === "string" && location.trim()) {
+      setKeyword(location);
+    }
+  }, [location]);
+
+  const navigateWithSelection = (nextCity: string, nextLocation: string) => {
+    const targetPath = from === "list" ? "/list" : "/";
+    if (targetPath === "/list") {
+      router.navigate({
+        pathname: "/list",
+        params: {
+          city: nextCity,
+          location: nextLocation,
+          checkIn: checkIn ?? "",
+          checkOut: checkOut ?? "",
+          priceStar: priceStar ?? "",
+          tags: tags ?? "",
+        },
+      });
+      return;
+    }
+    router.navigate({
+      pathname: "/",
+      params: { city: nextCity, location: nextLocation },
+    });
+  };
+
   const handleSubmit = () => {
     if (!keyword.trim()) {
       router.back();
       return;
     }
-    router.navigate({
-      pathname: "/",
-      params: { location: keyword.trim(), city: city ?? "扬州" },
-    });
+    navigateWithSelection(city ?? "扬州", keyword.trim());
   };
 
   const handleSelect = (selectedCity: string, selectedLocation: string) => {
-    router.navigate({
-      pathname: "/",
-      params: { city: selectedCity, location: selectedLocation },
-    });
+    navigateWithSelection(selectedCity, selectedLocation);
   };
 
   const handleLocate = async () => {
@@ -73,7 +103,7 @@ export default function LocationScreen() {
         .filter(Boolean)
         .join("");
       handleSelect(cityName, address || "当前位置");
-    } catch (error) {
+    } catch {
       setErrorText("定位失败，请重试");
     } finally {
       setLocating(false);
@@ -111,8 +141,9 @@ export default function LocationScreen() {
       <View className="mt-4 flex-row items-center justify-between">
         <Text className="text-sm text-slate-500">定位当前城市</Text>
         <Pressable
+          disabled={locating}
           onPress={handleLocate}
-          className="h-9 w-9 items-center justify-center rounded-full bg-[#E6F4FF]">
+          className={`h-9 w-9 items-center justify-center rounded-full ${locating ? "bg-[#D7E9FB]" : "bg-[#E6F4FF]"}`}>
           <IconSymbol size={18} name="location.fill" color="#1890FF" />
         </Pressable>
       </View>
