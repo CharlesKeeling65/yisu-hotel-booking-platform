@@ -4,6 +4,20 @@ type ApiResponse<T> = {
   code: number;
   data?: T;
   msg?: string;
+  page?: number;
+  pageSize?: number;
+  total?: number;
+  hasMore?: boolean;
+};
+
+export type ListParams = {
+  page?: number;
+  pageSize?: number;
+  city?: string;
+  keyword?: string;
+  priceStar?: string;
+  tags?: string[];
+  sort?: "price_asc" | "price_desc" | "star_desc";
 };
 
 async function getJson<T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
@@ -22,9 +36,42 @@ async function getJson<T>(path: string, options?: RequestInit): Promise<ApiRespo
   return data ?? { code: res.status };
 }
 
-export async function fetchMobileHotels<T>() {
-  const res = await getJson<T[]>("/api/mobile/hotels");
+export async function fetchMobileHomeBanners<T>() {
+  const res = await getJson<T[]>("/api/mobile/home-banner");
   return res.data ?? [];
+}
+
+export async function fetchMobileHotels<T>(params: ListParams = {}) {
+  const search = new URLSearchParams();
+  search.set("page", String(params.page || 1));
+  search.set("pageSize", String(params.pageSize || 10));
+  if (params.city) search.set("city", params.city);
+  if (params.keyword) search.set("keyword", params.keyword);
+  if (params.priceStar) {
+    if (params.priceStar.includes("3")) {
+      search.set("starMin", "3");
+      search.set("starMax", "3");
+    }
+    if (params.priceStar.includes("4")) {
+      search.set("starMin", "4");
+      search.set("starMax", "4");
+    }
+    if (params.priceStar.includes("5")) {
+      search.set("starMin", "5");
+      search.set("starMax", "5");
+    }
+  }
+  if (params.tags?.length) search.set("tags", params.tags.join(","));
+  if (params.sort) search.set("sort", params.sort);
+
+  const res = await getJson<T[]>(`/api/mobile/hotels?${search.toString()}`);
+  return {
+    list: res.data ?? [],
+    page: res.page ?? 1,
+    pageSize: res.pageSize ?? 10,
+    total: res.total ?? 0,
+    hasMore: Boolean(res.hasMore),
+  };
 }
 
 export async function fetchMobileHotelById<T>(id: string) {
@@ -33,7 +80,7 @@ export async function fetchMobileHotelById<T>(id: string) {
 }
 
 export async function loginMobile(username: string, password: string) {
-  const res = await getJson<{ token: string; user: { username: string; name: string } }>(
+  const res = await getJson<{ token: string; user: { username?: string; name: string } }>(
     "/api/mobile/login",
     {
       method: "POST",
