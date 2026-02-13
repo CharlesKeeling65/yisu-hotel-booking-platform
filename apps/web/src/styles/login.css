@@ -1,94 +1,171 @@
-/* 全局重置和基础样式 */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family: "Microsoft YaHei", sans-serif;
-}
+* { box-sizing: border-box; }
 
 .login-page {
   min-height: 100vh;
-  background: linear-gradient(90deg, #6a85b6 0%, #bac8e0 100%);
+  background: radial-gradient(circle at 0% 0%, #e9f4ff 0, #f7fbff 36%, #eef5f2 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
 }
 
-/* 顶部导航 */
 .top-bar {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
+  right: 0;
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 12px 24px;
-  background: rgba(255,255,255,0.1);
-  color: #fff;
-  font-size: 14px;
-  z-index: 100;
+  padding: 12px 20px;
+  color: #164260;
+  font-size: 13px;
 }
 
-.lang-switch { cursor: pointer }
-
-/* 登录容器 */
 .login-container {
-  width: 100%;
-  max-width: 1000px;
+  width: min(1080px, 100%);
   background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  border-radius: 24px;
   overflow: hidden;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  box-shadow: 0 20px 60px rgba(13, 73, 125, 0.18);
 }
 
-/* 左侧表单区 */
 .login-form {
-  width: 45%;
-  padding: 60px 40px;
+  padding: 44px 40px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a2f43;
+  margin-bottom: 28px;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, #1d8fff, #1ec2a1);
+  display: grid;
+  place-items: center;
+}
+
+.form-group { margin-bottom: 14px; }
+
+.form-group input,
+.form-select {
+  width: 100%;
+  border: 1px solid #d5e3ed;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  color: #253847;
+  background: #f8fbfd;
+}
+
+.form-group input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: #1d8fff;
+  background: #fff;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #4f6475;
+  font-size: 12px;
+}
+
+.login-btn {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, #0e86f0, #14b8a6);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.divider {
+  text-align: center;
+  margin: 18px 0 8px;
+  color: #7a8f9f;
+  font-size: 12px;
+}
+
+.secondary-link,
+.privacy-link {
+  color: #0076d6;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.form-error {
+  margin-bottom: 10px;
+  color: #cf2038;
+  font-size: 13px;
+}
+
+.pwd-tips {
+  margin-bottom: 10px;
+  color: #9d5200;
+  background: #fff5e6;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.pwd-tips.ok {
+  color: #047857;
+  background: #e8fff3;
+}
+
+.privacy {
+  margin-top: 12px;
+  color: #768a9b;
+  font-size: 12px;
+}
+
+.login-banner {
+  padding: 52px 48px;
+  background: linear-gradient(165deg, #0e3f61, #116c7f 55%, #0f8c96);
+  color: #fff;
   display: flex;
   flex-direction: column;
+  justify-content: center;
 }
 
-.logo { display:flex; align-items:center; font-size:24px; font-weight:600; color:#333; margin-bottom:40px }
-.logo-icon { width:32px; height:32px; background:#409eff; border-radius:4px; margin-right:8px; display:flex; align-items:center; justify-content:center; color:#fff }
+.banner-welcome {
+  opacity: 0.85;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
 
-.form-group { margin-bottom:24px }
-.form-group input { width:100%; padding:12px 16px; border:1px solid #e5e7eb; border-radius:6px; font-size:14px; outline:none; transition:border-color .3s }
-.form-group input:focus { border-color:#409eff }
+.banner-title {
+  font-size: 34px;
+  line-height: 1.24;
+  margin-bottom: 14px;
+}
 
-.forgot-pwd { text-align:right; font-size:12px; color:#409eff; cursor:pointer; margin-top:-12px; margin-bottom:24px }
+.banner-desc {
+  font-size: 14px;
+  line-height: 1.75;
+  opacity: 0.9;
+}
 
-.login-btn { width:100%; padding:12px; background:#409eff; color:#fff; border:none; border-radius:6px; font-size:16px; cursor:pointer }
-.login-btn:hover { background:#337ecc }
+.register-container .register-form { max-height: 88vh; overflow: auto; }
 
-.divider { text-align:center; margin:24px 0; color:#999; font-size:12px }
-
-.other-login { display:flex; gap:12px; margin-bottom:24px }
-.other-btn { flex:1; padding:10px; border:1px solid #e5e7eb; border-radius:6px; background:#fff; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px }
-
-.wechat-login { text-align:center; font-size:14px; color:#409eff; cursor:pointer; margin-bottom:24px }
-
-.privacy { text-align:center; font-size:12px; color:#999 }
-.privacy a { color:#409eff; text-decoration:none }
-
-/* 右侧宣传区 */
-.login-banner { width:55%; background: linear-gradient(135deg, #6a85b6 0%, #8b9abc 100%); color:#fff; padding:80px 60px; display:flex; flex-direction:column; justify-content:center }
-.banner-title { font-size:32px; font-weight:700; margin-bottom:20px; line-height:1.2 }
-.banner-desc { font-size:14px; line-height:1.6; margin-bottom:40px; opacity:0.9 }
-.register-btn { align-self:flex-start; padding:10px 24px; border:1px solid #fff; border-radius:20px; background:transparent; color:#fff; cursor:pointer }
-.register-btn:hover { background: rgba(255,255,255,0.1) }
-
-/* 错误弹窗 */
-.modal { position:fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); display:none; align-items:center; justify-content:center; z-index:999 }
-.modal-content { background:#fff; padding:30px 40px; border-radius:8px; text-align:center; width:100%; max-width:320px }
-.modal-content p { margin-bottom:20px; color:#333 }
-.modal-btn { padding:8px 24px; background:#409eff; color:#fff; border:none; border-radius:4px; cursor:pointer }
-
-@media (max-width: 900px) {
-  .login-container { flex-direction:column }
-  .login-form, .login-banner { width:100%; padding:40px }
-  .login-banner { border-radius:0 0 12px 12px }
+@media (max-width: 960px) {
+  .login-container { grid-template-columns: 1fr; }
+  .login-banner { padding: 30px 26px; }
+  .login-form { padding: 32px 24px; }
 }
