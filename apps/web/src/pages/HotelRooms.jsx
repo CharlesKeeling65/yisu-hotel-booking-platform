@@ -7,17 +7,10 @@ function toFiniteNumber(value, fallback = 0){
   return Number.isFinite(num) ? num : fallback
 }
 
-function toPositiveId(value){
-  const num = Number(value)
-  if (!Number.isFinite(num)) return undefined
-  const intVal = Math.trunc(num)
-  return intVal > 0 ? intVal : undefined
-}
-
 function normalizeRow(row = {}){
   return {
     ...row,
-    id: toPositiveId(row.id),
+    id: row.id ? String(row.id) : undefined,
     original: toFiniteNumber(row.original),
     current: toFiniteNumber(row.current),
     remain: toFiniteNumber(row.remain),
@@ -25,7 +18,7 @@ function normalizeRow(row = {}){
 }
 
 function normalizeRows(list){
-  return Array.isArray(list) ? list.map(item => normalizeRow({ ...item })) : []
+  return Array.isArray(list) ? list.filter(Boolean).map(item => normalizeRow({ ...item })) : []
 }
 
 const EMPTY_ROW = { type:'', original:0, current:0, discount:'', remain:0, status:'available', remark:'', image:'' }
@@ -33,7 +26,7 @@ const EMPTY_ROW = { type:'', original:0, current:0, discount:'', remain:0, statu
 export default function HotelRooms(){
   const { id } = useParams()
   const navigate = useNavigate()
-  const hotelId = Number(id) || 0
+  const hotelId = String(id || '')
   const [rows, setRows] = useState([])
   const [highlightIndex, setHighlightIndex] = useState(-1)
   const loadedRef = useRef(false)
@@ -65,7 +58,7 @@ export default function HotelRooms(){
     })()
   },[hotelId, editRoomId])
 
-  function getStorageKey(){ return 'priceListDraft:' + (hotelId||0) }
+  function getStorageKey(){ return 'priceListDraft:' + (hotelId||'') }
 
   function loadDraft(){
     try{
@@ -77,12 +70,12 @@ export default function HotelRooms(){
     }catch(e){}
     try{
       const merchants = JSON.parse(localStorage.getItem('merchantHotels')||'[]')
-      const m = merchants.find(h=>h.id===hotelId)
+      const m = merchants.find(h=>String(h.id)===String(hotelId))
       if (m && m.priceData && Array.isArray(m.priceData.roomPriceList)) return normalizeRows(m.priceData.roomPriceList)
     }catch(e){}
     try{
       const hotels = JSON.parse(localStorage.getItem('hotels')||'[]')
-      const h = hotels.find(x=>x.id===hotelId)
+      const h = hotels.find(x=>String(x.id)===String(hotelId))
       if (h && h.priceData && Array.isArray(h.priceData.roomPriceList)) return normalizeRows(h.priceData.roomPriceList)
     }catch(e){}
     return []
@@ -142,23 +135,23 @@ export default function HotelRooms(){
     persistDraft([])
   }
 
-  async function saveAndBack(){
+  async function saveAll(){
     persistDraft(rows)
-    if (!hotelId || hotelId === 0){
+    if (!hotelId || hotelId === '0'){
       alert('当前为新酒店草稿，房型已保存为本地草稿。请先保存或创建酒店，然后在已有酒店下同步房型到数据库。')
-      navigate(`/hotels/${hotelId}?tab=priceOverview`)
+      navigate('/dashboard')
       return
     }
     try{
       const payloadRooms = normalizeRows(rows)
-      const res = await fetch(`/api/hotels/${hotelId}/rooms/bulk`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rooms: payloadRooms }) })
+      const res = await fetch(`/api/hotels/${hotelId}/rooms/bulk-save`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rooms: payloadRooms }) })
       const json = await res.json().catch(()=>null)
       if (!res.ok) throw new Error((json && json.msg) || '同步失败')
-      const saved = Array.isArray(json && json.data) ? json.data : []
+      const saved = Array.isArray(json && json.data) ? json.data : payloadRooms
       const sanitized = normalizeRows(saved)
       setRows(sanitized)
       try{
-        const editKey = 'hotelEditDraft:' + (hotelId||0)
+        const editKey = 'hotelEditDraft:' + (hotelId||'')
         const raw = localStorage.getItem(editKey)
         if (raw){
           const draft = JSON.parse(raw)
@@ -168,7 +161,7 @@ export default function HotelRooms(){
       }catch(e){ console.warn('update hotelEditDraft failed', e) }
       try{ localStorage.removeItem(getStorageKey()) }catch(e){}
       alert('房型已同步到数据库')
-      navigate(`/hotels/${hotelId}?tab=priceOverview`)
+      return
     }catch(err){
       console.error(err)
       alert(err && err.message ? err.message : '同步失败，请检查网络或服务端')
@@ -178,6 +171,7 @@ export default function HotelRooms(){
   function updateRow(idx, patch){
     setRows(prev => {
       const copy = prev.slice()
+      if (!copy[idx]) copy[idx] = { ...EMPTY_ROW }
       copy[idx] = { ...copy[idx], ...patch }
       return copy
     })
@@ -217,7 +211,7 @@ export default function HotelRooms(){
     const row = rows[idx]
     try{
       persistDraft(rows)
-      if (!hotelId || hotelId === 0){
+      if (!hotelId || hotelId === '0'){
         alert('当前为新酒店草稿，房型已保存为本地草稿。请先保存或创建酒店，然后再同步到数据库。')
         return
       }
@@ -250,10 +244,11 @@ export default function HotelRooms(){
       <h2>编辑房型明细 <span className="small">{hotelId?('(hotel id=' + hotelId + ')'): '(新酒店草稿)'}</span></h2>
       <div className="toolbar">
         <button className="btn primary" onClick={addRow}>新增房型</button>
-        <button className="btn" onClick={saveAndBack}>保存并返回</button>
+        <button className="btn" onClick={saveAll}>保存</button>
+        <button className="btn" onClick={()=>navigate(`/hotels/${hotelId}`)}>返回</button>
         <button className="btn warn" onClick={clearAll}>清空所有</button>
         <div style={{flex:1}} />
-        <a className="back-link" onClick={(e)=>{ e.preventDefault(); navigate(`/hotels/${hotelId}?tab=priceOverview`) }}>返回房型概览</a>
+        <a className="back-link" onClick={(e)=>{ e.preventDefault(); navigate(`/hotels/${hotelId}`) }}>返回房型概览</a>
       </div>
 
       <div className="list" ref={listRef}>

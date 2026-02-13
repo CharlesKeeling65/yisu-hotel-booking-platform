@@ -1,52 +1,22 @@
 import { Image } from "expo-image";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Calendar, DateData } from "react-native-calendars";
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { IconSymbol } from "@/components/ui/icon-symbol";
+import SearchPanel from "@/components/hotel/SearchPanel";
+import { fetchMobileHomeBanners } from "@/lib/api";
 
-const QUICK_TAGS = ["外滩", "近地铁", "亲子房", "江景房", "商务区"];
+const QUICK_TAGS = ["亲子友好", "豪华酒店", "免费停车", "近地铁", "含早餐", "江景海景"];
 const PRICE_STAR_OPTIONS = ["不限星级", "3星", "4星", "5星"];
-
-type CounterRowProps = {
-  label: string;
-  value: number;
-  onAdd: () => void;
-  onSub: () => void;
-};
-
-function CounterRow({ label, value, onAdd, onSub }: CounterRowProps) {
-  return (
-    <View className="items-center">
-      <Text className="text-[11px] text-slate-500">{label}</Text>
-      <View className="mt-1 flex-row items-center gap-2">
-        <Pressable
-          onPress={onSub}
-          className="h-7 w-7 items-center justify-center rounded-full bg-slate-200">
-          <Text className="text-sm font-semibold text-slate-700">-</Text>
-        </Pressable>
-        <Text className="w-4 text-center text-sm font-semibold text-slate-900">{value}</Text>
-        <Pressable
-          onPress={onAdd}
-          className="h-7 w-7 items-center justify-center rounded-full bg-[#E6F4FF]">
-          <Text className="text-sm font-semibold text-[#1890FF]">+</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-const formatMonthDay = (value: string) => value.slice(5).replace("-", "/");
 
 const diffNights = (start: string, end: string) => {
   const startTime = new Date(start).getTime();
   const endTime = new Date(end).getTime();
   if (Number.isNaN(startTime) || Number.isNaN(endTime)) return 1;
-  const diff = Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24));
-  return Math.max(1, diff);
+  return Math.max(1, Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24)));
 };
 
 const buildMarkedDates = (start: string, end: string) => {
@@ -55,17 +25,12 @@ const buildMarkedDates = (start: string, end: string) => {
   const startDate = new Date(start);
   const endDate = new Date(end);
   if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return {};
-
   const cursor = new Date(startDate);
   while (cursor <= endDate) {
     const key = cursor.toISOString().slice(0, 10);
-    marked[key] = {
-      color: "#E6F4FF",
-      textColor: "#1890FF",
-    };
+    marked[key] = { color: "#E6F4FF", textColor: "#1890FF" };
     cursor.setDate(cursor.getDate() + 1);
   }
-
   marked[start] = { color: "#1890FF", textColor: "#fff", startingDay: true };
   marked[end] = { color: "#1890FF", textColor: "#fff", endingDay: true };
   return marked;
@@ -73,43 +38,70 @@ const buildMarkedDates = (start: string, end: string) => {
 
 const toDateString = (value: Date) => value.toISOString().slice(0, 10);
 
+type HomeBanner = {
+  id: string;
+  hotelId: string;
+  title: string;
+  subtitle: string;
+  image: string;
+};
+
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [city, setCity] = useState("扬州");
-  const { location: locationParam, city: cityParam } = useLocalSearchParams<{
-    location?: string;
-    city?: string;
-  }>();
+  const { width } = useWindowDimensions();
+  const bannerWidth = Math.max(280, Math.round(width - 32));
+  const bannerRef = useRef<ScrollView | null>(null);
+
+  const { location: locationParam, city: cityParam } = useLocalSearchParams<{ location?: string; city?: string }>();
+
+  const [city, setCity] = useState("上海市");
   const [location, setLocation] = useState("");
-  const [checkInDate, setCheckInDate] = useState("2026-02-05");
-  const [checkOutDate, setCheckOutDate] = useState("2026-02-06");
+  const [checkInDate, setCheckInDate] = useState("2026-02-12");
+  const [checkOutDate, setCheckOutDate] = useState("2026-02-13");
   const [rooms, setRooms] = useState(1);
-  const [adults, setAdults] = useState(1);
+  const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
-  const [priceStar, setPriceStar] = useState("4星");
+  const [priceStar, setPriceStar] = useState("不限星级");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  const [banners, setBanners] = useState<HomeBanner[]>([
+    { id: "fallback", hotelId: "", title: "易宿精选酒店", subtitle: "品质酒店限时优惠", image: "https://picsum.photos/seed/home_banner/1400/700" },
+  ]);
+  const [bannerIndex, setBannerIndex] = useState(0);
+
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isStarOpen, setIsStarOpen] = useState(false);
   const [selectStage, setSelectStage] = useState<"checkIn" | "checkOut">("checkIn");
-  const [showPrompt, setShowPrompt] = useState(false);
   const [locating, setLocating] = useState(false);
 
   const nights = diffNights(checkInDate, checkOutDate);
-  const markedDates = useMemo(
-    () => buildMarkedDates(checkInDate, checkOutDate),
-    [checkInDate, checkOutDate]
-  );
+  const markedDates = useMemo(() => buildMarkedDates(checkInDate, checkOutDate), [checkInDate, checkOutDate]);
 
   useEffect(() => {
-    if (typeof locationParam === "string") {
-      setLocation(locationParam);
-    }
+    fetchMobileHomeBanners<HomeBanner>()
+      .then((list) => {
+        if (list?.length) setBanners(list);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!banners.length) return;
+    const timer = setInterval(() => {
+      const next = (bannerIndex + 1) % banners.length;
+      bannerRef.current?.scrollTo({ x: next * bannerWidth, animated: true });
+      setBannerIndex(next);
+    }, 4800);
+    return () => clearInterval(timer);
+  }, [bannerIndex, banners.length, bannerWidth]);
+
+  useEffect(() => {
+    if (typeof locationParam === "string") setLocation(locationParam);
   }, [locationParam]);
 
   useEffect(() => {
-    if (typeof cityParam === "string") {
-      setCity(cityParam);
-    }
+    if (typeof cityParam === "string") setCity(cityParam);
   }, [cityParam]);
 
   const openCalendar = () => {
@@ -122,11 +114,6 @@ export default function HomeScreen() {
     setIsCalendarOpen(true);
   };
 
-  const flashPrompt = () => {
-    setShowPrompt(true);
-    setTimeout(() => setShowPrompt(false), 2000);
-  };
-
   const handleLocate = async () => {
     if (locating) return;
     setLocating(true);
@@ -134,14 +121,9 @@ export default function HomeScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
       const pos = await Location.getCurrentPositionAsync({});
-      const info = await Location.reverseGeocodeAsync({
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-      });
-      const cityName = info[0]?.city ?? "扬州";
-      const address = [info[0]?.district, info[0]?.street, info[0]?.name]
-        .filter(Boolean)
-        .join("");
+      const info = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+      const cityName = info[0]?.city ?? "上海市";
+      const address = [info[0]?.district, info[0]?.street, info[0]?.name].filter(Boolean).join("");
       setCity(cityName);
       setLocation(address || "当前位置");
     } finally {
@@ -149,171 +131,107 @@ export default function HomeScreen() {
     }
   };
 
+  function runSearch(extraTags?: string[]) {
+    router.push({
+      pathname: "/list",
+      params: {
+        city,
+        location,
+        keyword: location,
+        checkIn: checkInDate,
+        checkOut: checkOutDate,
+        rooms: String(rooms),
+        adults: String(adults),
+        children: String(children),
+        priceStar,
+        tags: (extraTags || selectedTags).join(","),
+      },
+    });
+  }
+
   return (
-    <ScrollView
-      className="flex-1 bg-white"
-      contentContainerClassName="px-4 pb-24"
-      style={{ paddingTop: insets.top + 12 }}>
-      <View className="overflow-hidden rounded-3xl bg-[#C8F1FF]">
-        <View className="px-5 py-6">
-          <Text className="text-lg font-semibold text-slate-900">热门目的地酒店优惠出炉</Text>
-          <Text className="mt-1 text-sm text-slate-700">限时特卖 · 最佳酒店</Text>
-        </View>
-        <Image
-          source={{
-            uri: "https://images.unsplash.com/photo-1505761671935-60b3a7427bad?auto=format&fit=crop&w=1400&q=80",
+    <ScrollView className="flex-1 bg-[#F5F8FC]" contentContainerClassName="px-4 pb-24" style={{ paddingTop: insets.top + 8 }}>
+      <View className="overflow-hidden rounded-3xl bg-slate-200">
+        <ScrollView
+          ref={bannerRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          bounces
+          onMomentumScrollEnd={(e) => {
+            const x = e.nativeEvent.contentOffset.x;
+            const idx = Math.max(0, Math.min(banners.length - 1, Math.round(x / bannerWidth)));
+            setBannerIndex(idx);
           }}
-          className="h-28 w-full"
-          contentFit="cover"
+        >
+          {banners.map((banner) => (
+            <Pressable
+              key={banner.id}
+              style={{ width: bannerWidth }}
+              onPress={() => {
+                if (banner.hotelId) router.push({ pathname: "/hotel/[id]", params: { id: banner.hotelId } });
+              }}
+            >
+              <Image source={{ uri: banner.image }} className="h-48 w-full" contentFit="cover" />
+              <View className="absolute inset-0 bg-black/25" />
+              <View className="absolute left-4 right-4 top-4">
+                <Text className="text-lg font-semibold text-white">{banner.title}</Text>
+                <Text className="mt-1 text-sm text-white/90">{banner.subtitle}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <View className="absolute bottom-3 left-0 right-0 flex-row items-center justify-center gap-1">
+          {banners.map((_, idx) => (
+            <View key={idx} className={`h-1.5 w-4 rounded-full ${idx === bannerIndex ? "bg-white" : "bg-white/45"}`} />
+          ))}
+        </View>
+      </View>
+
+      <View className="mt-4">
+        <SearchPanel
+          city={city}
+          location={location}
+          checkInDate={checkInDate}
+          checkOutDate={checkOutDate}
+          nights={nights}
+          rooms={rooms}
+          adults={adults}
+          childCount={children}
+          starLabel={priceStar}
+          onCityPress={() => router.push({ pathname: "/location", params: { city } })}
+          onLocationPress={() => router.push({ pathname: "/location", params: { city, location } })}
+          onLocatePress={() => handleLocate()}
+          onDatePress={openCalendar}
+          onStarPress={() => setIsStarOpen(true)}
+          onStepRooms={(delta) => setRooms((x) => Math.max(1, x + delta))}
+          onStepAdults={(delta) => setAdults((x) => Math.max(1, x + delta))}
+          onStepChildren={(delta) => setChildren((x) => Math.max(0, x + delta))}
+          onSearch={() => runSearch()}
         />
       </View>
 
-      <View className="-mt-10 rounded-3xl border border-slate-100 bg-white p-4 shadow-lg">
-        <View className="flex-row items-center gap-2">
-          <Text className="rounded-full bg-[#E6F4FF] px-3 py-1 text-xs font-semibold text-[#1890FF]">
-            国内
-          </Text>
-          <Text className="text-xs text-slate-400">|</Text>
-          <Text className="text-xs text-slate-500">海外</Text>
-        </View>
-
-        <View className="mt-4 flex-row items-center rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-          <Pressable
-            className="flex-row items-center"
-            onPress={() => {
-              router.push({ pathname: "/location", params: { city } });
-            }}>
-            <Text className="text-sm font-semibold text-slate-900">{city}</Text>
-            <Text className="ml-1 text-xs text-slate-400">▼</Text>
-          </Pressable>
-          <Text className="mx-3 text-xs text-slate-300">|</Text>
-          <Pressable
-            className="flex-1"
-            onPress={() => {
-              router.push({ pathname: "/location", params: { city } });
-            }}>
-            <TextInput
-              value={location}
-              editable={false}
-              pointerEvents="none"
-              className="text-sm text-slate-900"
-              placeholder="位置/商圈/酒店"
-              placeholderTextColor="#C0C4CC"
-            />
-          </Pressable>
-          <Pressable
-            onPress={handleLocate}
-            className="ml-2 h-8 w-8 items-center justify-center rounded-full bg-[#E6F4FF]">
-            <IconSymbol size={16} name="location.fill" color="#1890FF" />
-          </Pressable>
-        </View>
-
-        <Pressable
-          className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3"
-          onPress={openCalendar}>
-          <View className="flex-row items-center justify-between">
-            <View>
-              <Text className="text-[11px] uppercase text-slate-400">日期</Text>
-              <Text className="mt-1 text-sm font-semibold text-slate-900">
-                {formatMonthDay(checkInDate)} - {formatMonthDay(checkOutDate)}
-              </Text>
-            </View>
-            <Text className="text-sm font-semibold text-[#1890FF]">共{nights}晚</Text>
-          </View>
-        </Pressable>
-
-        <View className="mt-3 flex-row items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-          <View className="flex-row items-center gap-4">
-            <CounterRow
-              label="房间"
-              value={rooms}
-              onAdd={() => setRooms((value) => value + 1)}
-              onSub={() => setRooms((value) => Math.max(1, value - 1))}
-            />
-            <CounterRow
-              label="成人"
-              value={adults}
-              onAdd={() => setAdults((value) => value + 1)}
-              onSub={() => setAdults((value) => Math.max(1, value - 1))}
-            />
-            <CounterRow
-              label="儿童"
-              value={children}
-              onAdd={() => setChildren((value) => value + 1)}
-              onSub={() => setChildren((value) => Math.max(0, value - 1))}
-            />
-          </View>
-          <Pressable
-            onPress={() => setIsStarOpen(true)}
-            className="ml-3 flex-row items-center rounded-full bg-[#FFF7E6] px-3 py-2">
-            <Text className="text-xs font-semibold text-[#FFA940]">{priceStar}</Text>
-            <Text className="ml-1 text-xs text-[#FFA940]">▼</Text>
-          </Pressable>
-        </View>
-
-        <View className="mt-4 flex-row flex-wrap gap-2">
-          {QUICK_TAGS.map((tag) => (
-            <Pressable
-              key={tag}
-              onPress={() => {
-                setLocation(tag);
-                router.push({
-                  pathname: "/list",
-                  params: {
-                    city,
-                    location: tag,
-                    checkIn: checkInDate,
-                    checkOut: checkOutDate,
-                    rooms: String(rooms),
-                    adults: String(adults),
-                    children: String(children),
-                    priceStar,
-                  },
-                });
-              }}
-              className="rounded-full bg-[#F5F7FB] px-3 py-2">
-              <Text className="text-xs text-slate-600">{tag}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <Pressable
-          className="mt-5 rounded-2xl bg-[#1890FF] py-4"
-          onPress={() =>
-            router.push({
-              pathname: "/list",
-              params: {
-                city,
-                location,
-                checkIn: checkInDate,
-                checkOut: checkOutDate,
-                rooms: String(rooms),
-                adults: String(adults),
-                children: String(children),
-                priceStar,
-              },
-            })
-          }>
-          <Text className="text-center text-sm font-semibold text-white">查询</Text>
-        </Pressable>
-      </View>
-
-      <View className="mt-6 rounded-2xl border border-slate-100 bg-white p-4">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-base font-semibold text-slate-900">口碑榜</Text>
-          <Text className="text-xs text-[#1890FF]">城市精选</Text>
-        </View>
-        <View className="mt-4 rounded-2xl overflow-hidden">
-          <Image
-            source={{
-              uri: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1400&q=80",
-            }}
-            className="h-32 w-full"
-            contentFit="cover"
-          />
-          <View className="absolute bottom-3 left-3 rounded-full bg-black/50 px-3 py-1">
-            <Text className="text-xs font-semibold text-white">这个夏天一起去看海</Text>
-          </View>
+      <View className="mt-4 rounded-2xl border border-slate-100 bg-white p-4">
+        <Text className="text-sm font-semibold text-slate-800">快捷标签</Text>
+        <View className="mt-3 flex-row flex-wrap gap-2">
+          {QUICK_TAGS.map((tag) => {
+            const active = selectedTags.includes(tag);
+            return (
+              <Pressable
+                key={tag}
+                className={`rounded-full px-3 py-2 ${active ? "bg-[#DDF5ED]" : "bg-[#F5F7FB]"}`}
+                onPress={() => {
+                  const next = active ? selectedTags.filter((x) => x !== tag) : [...selectedTags, tag];
+                  setSelectedTags(next);
+                  runSearch(next);
+                }}
+              >
+                <Text className="text-xs text-slate-600">{tag}</Text>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
 
@@ -321,10 +239,8 @@ export default function HomeScreen() {
         <View className="flex-1 items-center justify-center bg-black/40 px-4">
           <View className="w-full rounded-3xl bg-white p-4">
             <View className="flex-row items-center justify-between pb-2">
-              <Text className="text-base font-semibold text-slate-900">选择日期</Text>
-              <Pressable onPress={() => setIsCalendarOpen(false)}>
-                <Text className="text-sm text-slate-400">关闭</Text>
-              </Pressable>
+              <Text className="text-base font-semibold text-slate-900">选择入住和离店日期</Text>
+              <Pressable onPress={() => setIsCalendarOpen(false)}><Text className="text-sm text-slate-400">关闭</Text></Pressable>
             </View>
             <Calendar
               markingType="period"
@@ -334,44 +250,21 @@ export default function HomeScreen() {
                   setCheckInDate(day.dateString);
                   setCheckOutDate(day.dateString);
                   setSelectStage("checkOut");
-                  flashPrompt();
                   return;
                 }
-
                 if (day.dateString > checkInDate) {
                   setCheckOutDate(day.dateString);
                   setSelectStage("checkIn");
+                  setIsCalendarOpen(false);
                   return;
                 }
-
                 setCheckInDate(day.dateString);
                 setCheckOutDate(day.dateString);
-                setSelectStage("checkOut");
-                flashPrompt();
               }}
-              theme={{
-                todayTextColor: "#1890FF",
-                arrowColor: "#1890FF",
-                textDayFontWeight: "500",
-                textMonthFontWeight: "600",
-              }}
+              theme={{ todayTextColor: "#1890FF", arrowColor: "#1890FF", textDayFontWeight: "500", textMonthFontWeight: "600" }}
             />
-            <Pressable
-              className="mt-3 rounded-2xl bg-[#1890FF] py-3"
-              onPress={() => setIsCalendarOpen(false)}>
-              <Text className="text-center text-sm font-semibold text-white">
-                确认 · 共{nights}晚
-              </Text>
-            </Pressable>
           </View>
         </View>
-        {showPrompt ? (
-          <View className="absolute bottom-20 left-0 right-0 items-center">
-            <View className="rounded-full bg-black/70 px-4 py-2">
-              <Text className="text-xs text-white">请选择离店日期</Text>
-            </View>
-          </View>
-        ) : null}
       </Modal>
 
       <Modal transparent visible={isStarOpen} animationType="fade">
@@ -379,25 +272,16 @@ export default function HomeScreen() {
           <View className="w-full rounded-3xl bg-white p-4">
             <View className="flex-row items-center justify-between pb-2">
               <Text className="text-base font-semibold text-slate-900">选择星级</Text>
-              <Pressable onPress={() => setIsStarOpen(false)}>
-                <Text className="text-sm text-slate-400">关闭</Text>
-              </Pressable>
+              <Pressable onPress={() => setIsStarOpen(false)}><Text className="text-sm text-slate-400">关闭</Text></Pressable>
             </View>
             {PRICE_STAR_OPTIONS.map((option) => (
-              <Pressable
-                key={option}
-                onPress={() => {
-                  setPriceStar(option);
-                  setIsStarOpen(false);
-                }}
-                className="rounded-2xl border border-slate-100 px-3 py-3 mt-2">
+              <Pressable key={option} onPress={() => { setPriceStar(option); setIsStarOpen(false); }} className="mt-2 rounded-2xl border border-slate-100 px-3 py-3">
                 <Text className="text-sm text-slate-700">{option}</Text>
               </Pressable>
             ))}
           </View>
         </View>
       </Modal>
-
     </ScrollView>
   );
 }
