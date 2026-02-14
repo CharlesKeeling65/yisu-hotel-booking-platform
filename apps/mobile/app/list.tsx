@@ -6,39 +6,49 @@
  * 3) 顶部紧凑搜索条 + 日历弹层，支持二次筛选
  */
 import { useEffect, useMemo, useState } from "react";
-import { FlatList, Modal, Pressable, Text, View } from "react-native";
-import { Calendar, DateData } from "react-native-calendars";
+import { FlatList, Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import DateRangePickerSheet from "@/components/hotel/DateRangePickerSheet";
+import FilterBottomSheet from "@/components/hotel/FilterBottomSheet";
+import GuestPickerSheet, { GuestDraft } from "@/components/hotel/GuestPickerSheet";
 import HotelCard from "@/components/hotel/HotelCard";
 import CompactSearchPanel from "@/components/hotel/CompactSearchPanel";
-import HotelFilters from "@/components/hotel/HotelFilters";
+import PriceStarPickerSheet, { PriceStarDraft } from "@/components/hotel/PriceStarPickerSheet";
 import type { Hotel } from "@yisu/shared";
 import { fetchMobileHotels } from "@/lib/api";
+import { getDefaultSearchSession, getSearchSession, setSearchSession } from "@/lib/search-session";
 
-const buildMarkedDates = (start: string, end: string) => {
-  // 与首页保持一致：生成“区间高亮”给 Calendar 组件
-  if (!start || !end) return {};
-  const marked: Record<string, { color: string; textColor: string; startingDay?: boolean; endingDay?: boolean }> = {};
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return {};
-  const cursor = new Date(startDate);
-  while (cursor <= endDate) {
-    const key = cursor.toISOString().slice(0, 10);
-    marked[key] = { color: "#E6F4FF", textColor: "#1890FF" };
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  marked[start] = { color: "#1890FF", textColor: "#fff", startingDay: true };
-  marked[end] = { color: "#1890FF", textColor: "#fff", endingDay: true };
-  return marked;
-};
+const SORT_OPTIONS = [
+  { label: "推荐", value: undefined as "price_asc" | "price_desc" | "star_desc" | undefined },
+  { label: "价格升序", value: "price_asc" as const },
+  { label: "价格降序", value: "price_desc" as const },
+  { label: "星级优先", value: "star_desc" as const },
+];
+const SCENIC_SPOT_OPTIONS = ["外滩", "东方明珠", "迪士尼", "人民广场", "南京路", "豫园", "鸟巢", "三里屯", "颐和园", "西湖"];
+const TAG_OPTIONS = ["亲子友好", "豪华酒店", "免费停车", "近地铁", "含早餐", "江景海景"];
+const DEFAULT_PRICE: PriceStarDraft = { min: 0, max: 800, stars: [] };
+const STAR_MAP: Record<string, number> = { "2星及以下": 2, "3星": 3, "4星": 4 };
+
+function parsePriceStar(label: string): PriceStarDraft {
+  const text = String(label || "");
+  const stars: string[] = [];
+  if (text.includes("2星及以下")) stars.push("2星及以下");
+  if (text.includes("3星")) stars.push("3星");
+  if (text.includes("4星")) stars.push("4星");
+
+  const range = text.match(/¥(\d+)-¥(\d+)\+?/);
+  if (range?.[1] && range?.[2]) return { min: Number(range[1]), max: Number(range[2]), stars };
+  return { ...DEFAULT_PRICE, stars };
+}
 
 export default function ListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const defaultSession = getDefaultSearchSession();
+  const session = getSearchSession();
   const params = useLocalSearchParams<{
     city?: string;
     location?: string;
@@ -47,14 +57,31 @@ export default function ListScreen() {
     checkOut?: string;
     priceStar?: string;
     tags?: string;
+    scenicSpots?: string;
+    sort?: "price_asc" | "price_desc" | "star_desc";
+    rooms?: string;
+    adults?: string;
+    children?: string;
   }>();
+  const firstTag = typeof params.tags === "string" ? params.tags.split(",").map((x) => x.trim()).filter(Boolean)[0] : "";
 
-  const [city, setCity] = useState(params.city || "上海市");
-  const [location, setLocation] = useState(params.location || params.keyword || "");
-  const [checkInDate, setCheckInDate] = useState(params.checkIn || "2026-02-12");
-  const [checkOutDate, setCheckOutDate] = useState(params.checkOut || "2026-02-13");
-  const [priceStar] = useState(params.priceStar || "不限星级");
-  const [tags] = useState(params.tags || "");
+  const [city, setCity] = useState(params.city || session.city || "上海市");
+  const [location, setLocation] = useState(params.location || params.keyword || firstTag || session.location || "");
+  const [checkInDate, setCheckInDate] = useState(params.checkIn || session.checkIn || defaultSession.checkIn);
+  const [checkOutDate, setCheckOutDate] = useState(params.checkOut || session.checkOut || defaultSession.checkOut);
+  const [rooms, setRooms] = useState(Math.max(1, Number(params.rooms || session.rooms || "1")));
+  const [adults, setAdults] = useState(Math.max(Math.max(1, Number(params.adults || session.adults || "1")), Math.max(1, Number(params.rooms || session.rooms || "1"))));
+  const [children, setChildren] = useState(Math.max(0, Number(params.children || session.children || "0")));
+  const [priceStar, setPriceStar] = useState(params.priceStar || session.priceStar || "不限星级");
+  const [tags, setTags] = useState(params.tags || session.tags || "");
+  const [priceDraft, setPriceDraft] = useState<PriceStarDraft>(parsePriceStar(params.priceStar || session.priceStar || ""));
+  const [selectedSpots, setSelectedSpots] = useState<string[]>(
+    typeof params.scenicSpots === "string"
+      ? params.scenicSpots.split(",").map((x) => x.trim()).filter(Boolean)
+      : session.scenicSpots
+        ? session.scenicSpots.split(",").map((x) => x.trim()).filter(Boolean)
+      : []
+  );
 
   const [list, setList] = useState<Hotel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,24 +89,55 @@ export default function ListScreen() {
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [sort, setSort] = useState<"price_asc" | "price_desc" | "star_desc" | undefined>(undefined);
+  const [sort, setSort] = useState<"price_asc" | "price_desc" | "star_desc" | undefined>(params.sort || (session.sort as "price_asc" | "price_desc" | "star_desc" | undefined));
   const [locating, setLocating] = useState(false);
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [stage, setStage] = useState<"checkIn" | "checkOut">("checkIn");
+  const [isSortOpen, setIsSortOpen] = useState(false);
+  const [isScenicOpen, setIsScenicOpen] = useState(false);
+  const [isPriceOpen, setIsPriceOpen] = useState(false);
+  const [isTagOpen, setIsTagOpen] = useState(false);
+  const [isGuestOpen, setIsGuestOpen] = useState(false);
 
   const nights = useMemo(() => {
     const diff = Math.ceil((new Date(checkOutDate).getTime() - new Date(checkInDate).getTime()) / (1000 * 60 * 60 * 24));
     return Math.max(1, diff);
   }, [checkInDate, checkOutDate]);
-  const markedDates = useMemo(() => buildMarkedDates(checkInDate, checkOutDate), [checkInDate, checkOutDate]);
   const tagList = useMemo(() => (tags ? tags.split(",").map((x) => x.trim()).filter(Boolean) : []), [tags]);
+  const sortLabel = useMemo(
+    () => SORT_OPTIONS.find((item) => item.value === sort)?.label || "排序",
+    [sort]
+  );
+  const scenicCount = selectedSpots.length;
+  const tagCount = tagList.length;
+  const priceCount = (priceDraft.min !== 0 || priceDraft.max !== 800 ? 1 : 0) + (priceDraft.stars.length ? 1 : 0);
 
   useEffect(() => {
     if (typeof params.city === "string") setCity(params.city);
     if (typeof params.location === "string") setLocation(params.location);
     if (!params.location && typeof params.keyword === "string") setLocation(params.keyword);
-  }, [params.city, params.location, params.keyword]);
+    if (!params.location && !params.keyword && firstTag) setLocation(firstTag);
+    if (typeof params.priceStar === "string") {
+      setPriceStar(params.priceStar || "不限星级");
+      setPriceDraft(parsePriceStar(params.priceStar || ""));
+    }
+    if (typeof params.tags === "string") setTags(params.tags);
+    if (params.tags === undefined) setTags("");
+    const roomParam = typeof params.rooms === "string" ? Math.max(1, Number(params.rooms || "1")) : null;
+    const adultParam = typeof params.adults === "string" ? Math.max(1, Number(params.adults || "1")) : null;
+    if (roomParam !== null) {
+      setRooms(roomParam);
+      setAdults((prev) => Math.max(adultParam ?? prev, roomParam));
+    } else if (adultParam !== null) {
+      setAdults((prev) => Math.max(adultParam, prev));
+    }
+    if (typeof params.children === "string") setChildren(Math.max(0, Number(params.children || "0")));
+    if (typeof params.scenicSpots === "string") {
+      setSelectedSpots(params.scenicSpots.split(",").map((x) => x.trim()).filter(Boolean));
+    }
+    if (params.scenicSpots === undefined) setSelectedSpots([]);
+    if (typeof params.sort === "string") setSort(params.sort);
+  }, [params.city, params.location, params.keyword, params.priceStar, params.tags, params.rooms, params.adults, params.children, params.scenicSpots, params.sort, firstTag]);
 
   async function handleLocate() {
     // 在列表页直接定位并重载结果，减少返回首页的操作成本
@@ -113,7 +171,11 @@ export default function ListScreen() {
         city,
         keyword: location,
         priceStar,
+        priceMin: priceDraft.min,
+        priceMax: priceDraft.max,
+        stars: priceDraft.stars.map((x) => STAR_MAP[x]).filter(Boolean),
         tags: tagList,
+        scenicSpots: selectedSpots,
         sort,
       });
       setList((prev) => (append ? [...prev, ...data.list] : data.list));
@@ -131,53 +193,165 @@ export default function ListScreen() {
     // 任何检索条件变化都重跑首屏查询
     load(1, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [city, location, checkInDate, checkOutDate, priceStar, tags, sort]);
+  }, [city, location, checkInDate, checkOutDate, priceStar, tags, selectedSpots, sort, priceDraft]);
+
+  useEffect(() => {
+    setSearchSession({
+      city,
+      location,
+      checkIn: checkInDate,
+      checkOut: checkOutDate,
+      rooms,
+      adults: Math.max(adults, rooms),
+      children,
+      priceStar,
+      tags,
+      scenicSpots: selectedSpots.join(","),
+      sort: sort || "",
+    });
+  }, [city, location, checkInDate, checkOutDate, rooms, adults, children, priceStar, tags, selectedSpots, sort]);
 
   return (
     <>
       <FlatList
         className="flex-1 bg-neutral-50"
         contentContainerClassName="px-4 pb-24"
-        contentContainerStyle={{ paddingTop: insets.top + 8 }}
+        contentContainerStyle={{ paddingTop: 0 }}
         data={list}
         keyExtractor={(item) => item.id}
         stickyHeaderIndices={[0]}
         ListHeaderComponent={
-          <View className="pb-3 bg-[#F5F8FC]">
-            <View className="mb-2 flex-row items-center justify-between rounded-2xl bg-white px-3 py-3">
-              <Pressable onPress={() => router.back()}>
-                <Text className="text-sm font-semibold text-[#1890FF]">返回</Text>
-              </Pressable>
-              <Text className="text-base font-semibold text-slate-900">酒店查询</Text>
-              <View style={{ width: 40 }} />
+          <View className="bg-neutral-50">
+            <View
+              className="-mx-4 bg-white px-4 pb-3"
+              style={{ paddingTop: insets.top + 4 }}
+            >
+              <CompactSearchPanel
+                city={city}
+                location={location}
+                checkInDate={checkInDate}
+                checkOutDate={checkOutDate}
+                nights={nights}
+                rooms={rooms}
+                adults={adults}
+                childCount={children}
+                onBackPress={() => {
+                  // 返回首页时重置排序：下次从首页进入列表默认“推荐”。
+                  setSearchSession({ sort: "" });
+                  try {
+                    router.back();
+                    return;
+                  } catch {}
+                  router.replace("/");
+                }}
+                onCityPress={() =>
+                  router.push({
+                    pathname: "/location",
+                    params: {
+                      city,
+                      from: "list",
+                      checkIn: checkInDate,
+                      checkOut: checkOutDate,
+                      priceStar,
+                      tags,
+                      rooms: String(rooms),
+                      adults: String(adults),
+                      children: String(children),
+                      scenicSpots: selectedSpots.join(","),
+                      sort: sort || "",
+                    },
+                  })
+                }
+                onLocationPress={() =>
+                  router.push({
+                    pathname: "/location",
+                    params: {
+                      city,
+                      location,
+                      from: "list",
+                      checkIn: checkInDate,
+                      checkOut: checkOutDate,
+                      priceStar,
+                      tags,
+                      rooms: String(rooms),
+                      adults: String(adults),
+                      children: String(children),
+                      scenicSpots: selectedSpots.join(","),
+                      sort: sort || "",
+                    },
+                  })
+                }
+                onLocationClearPress={() => {
+                  setLocation("");
+                  setTags("");
+                }}
+                onLocatePress={() => handleLocate()}
+                onDatePress={() => setIsCalendarOpen(true)}
+                onGuestPress={() => setIsGuestOpen(true)}
+                onSearch={() => load(1, false)}
+                flat
+                filterButtons={[
+                  {
+                    key: "sort",
+                    label: sortLabel,
+                    active: Boolean(sort),
+                    onPress: () => setIsSortOpen(true),
+                  },
+                  {
+                    key: "scenic",
+                    label: "附近景点",
+                    active: scenicCount > 0,
+                    count: scenicCount || undefined,
+                    onPress: () => setIsScenicOpen(true),
+                  },
+                  {
+                    key: "price",
+                    label: "价格/星级",
+                    active: priceCount > 0,
+                    count: priceCount || undefined,
+                    onPress: () => setIsPriceOpen(true),
+                  },
+                  {
+                    key: "tag",
+                    label: "标签",
+                    active: tagCount > 0,
+                    count: tagCount || undefined,
+                    onPress: () => setIsTagOpen(true),
+                  },
+                ]}
+              />
             </View>
-            <CompactSearchPanel
-              city={city}
-              location={location}
-              checkInDate={checkInDate}
-              checkOutDate={checkOutDate}
-              nights={nights}
-              onCityPress={() => router.push({ pathname: "/location", params: { city } })}
-              onLocationPress={() =>
-                router.push({
-                  pathname: "/location",
-                  params: { city, location, from: "list", checkIn: checkInDate, checkOut: checkOutDate, priceStar, tags },
-                })}
-              onLocatePress={() => handleLocate()}
-              onDatePress={() => { setStage("checkIn"); setIsCalendarOpen(true); }}
-              onSearch={() => load(1, false)}
-            />
-            <Text className="mt-4 text-2xl font-semibold text-neutral-900">酒店列表</Text>
             {loading ? <Text className="mt-2 text-xs text-neutral-400">加载中...</Text> : null}
             {error ? <Text className="mt-2 text-xs text-red-400">加载失败：{error}</Text> : null}
-            <View className="mt-3"><HotelFilters onChange={setSort} /></View>
           </View>
         }
-        renderItem={({ item }) => (
-          <HotelCard
-            hotel={item}
-            onPress={() => router.push({ pathname: "/hotel/[id]", params: { id: item.id, checkIn: checkInDate, checkOut: checkOutDate, nights: String(nights) } })}
-          />
+        renderItem={({ item, index }) => (
+          <View className={index === 0 ? "mt-3" : ""}>
+            <HotelCard
+              hotel={item}
+              onPress={() =>
+                router.push({
+                  pathname: "/hotel/[id]",
+                  params: {
+                    id: item.id,
+                    from: "list",
+                    city,
+                    location,
+                    checkIn: checkInDate,
+                    checkOut: checkOutDate,
+                    rooms: String(rooms),
+                    adults: String(adults),
+                    children: String(children),
+                    priceStar,
+                    tags,
+                    scenicSpots: selectedSpots.join(","),
+                    sort: sort || "",
+                    nights: String(nights),
+                  },
+                })
+              }
+            />
+          </View>
         )}
         onEndReached={() => {
           if (loadingMore || loading || !hasMore) return;
@@ -190,34 +364,117 @@ export default function ListScreen() {
         ListFooterComponent={<View className="items-center py-6"><Text className="text-xs text-neutral-400">{loadingMore ? "加载更多中..." : hasMore ? "上滑加载更多" : "没有更多酒店了"}</Text></View>}
       />
 
-      <Modal transparent visible={isCalendarOpen} animationType="fade">
-        <View className="flex-1 items-center justify-center bg-black/40 px-4">
-          <View className="w-full rounded-3xl bg-white p-4">
-            <View className="flex-row items-center justify-between pb-2"><Text className="text-base font-semibold text-slate-900">选择入住和离店日期</Text><Pressable onPress={() => setIsCalendarOpen(false)}><Text className="text-sm text-slate-400">关闭</Text></Pressable></View>
-            <Calendar
-              markingType="period"
-              markedDates={markedDates}
-              onDayPress={(day: DateData) => {
-                if (stage === "checkIn") {
-                  setCheckInDate(day.dateString);
-                  setCheckOutDate(day.dateString);
-                  setStage("checkOut");
-                  return;
-                }
-                if (day.dateString > checkInDate) {
-                  setCheckOutDate(day.dateString);
-                  setStage("checkIn");
-                  setIsCalendarOpen(false);
-                  return;
-                }
-                setCheckInDate(day.dateString);
-                setCheckOutDate(day.dateString);
-              }}
-              theme={{ todayTextColor: "#1890FF", arrowColor: "#1890FF", textDayFontWeight: "500", textMonthFontWeight: "600" }}
-            />
-          </View>
+      <DateRangePickerSheet
+        visible={isCalendarOpen}
+        checkInDate={checkInDate}
+        checkOutDate={checkOutDate}
+        onClose={() => setIsCalendarOpen(false)}
+        onConfirm={({ checkInDate: nextIn, checkOutDate: nextOut }) => {
+          setCheckInDate(nextIn);
+          setCheckOutDate(nextOut);
+        }}
+      />
+
+      <GuestPickerSheet
+        visible={isGuestOpen}
+        initial={{ rooms, adults, children } satisfies GuestDraft}
+        onClose={() => setIsGuestOpen(false)}
+        onConfirm={(next) => {
+          setRooms(next.rooms);
+          setAdults(Math.max(next.adults, next.rooms));
+          setChildren(next.children);
+          setIsGuestOpen(false);
+        }}
+      />
+
+      <FilterBottomSheet visible={isSortOpen} title="排序" onClose={() => setIsSortOpen(false)}>
+        <View className="mt-1 gap-2">
+          {SORT_OPTIONS.map((item) => {
+            const active = sort === item.value;
+            return (
+              <Pressable
+                key={item.label}
+                onPress={() => {
+                  setSort(item.value);
+                  setIsSortOpen(false);
+                }}
+                className={`rounded-xl border px-3 py-3 ${active ? "border-[#1890FF] bg-[#E6F4FF]" : "border-slate-200 bg-white"}`}
+              >
+                <Text className={`text-sm ${active ? "font-semibold text-[#1890FF]" : "text-slate-700"}`}>{item.label}</Text>
+              </Pressable>
+            );
+          })}
         </View>
-      </Modal>
+      </FilterBottomSheet>
+
+      <FilterBottomSheet visible={isScenicOpen} title="附近景点" onClose={() => setIsScenicOpen(false)}>
+        <View className="mt-1 flex-row flex-wrap gap-2">
+          {SCENIC_SPOT_OPTIONS.map((item) => {
+            const active = selectedSpots.includes(item);
+            return (
+              <Pressable
+                key={item}
+                onPress={() =>
+                  setSelectedSpots((prev) => (active ? prev.filter((x) => x !== item) : [...prev, item]))
+                }
+                className={`rounded-full px-3 py-2 ${active ? "bg-[#E6F4FF]" : "border border-slate-200 bg-white"}`}
+              >
+                <Text className={`text-xs ${active ? "text-[#1890FF]" : "text-slate-600"}`}>{item}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View className="mt-4 flex-row items-center gap-3">
+          <Pressable onPress={() => setSelectedSpots([])} className="flex-1 rounded-xl border border-slate-200 py-3">
+            <Text className="text-center text-sm font-semibold text-slate-600">清空</Text>
+          </Pressable>
+          <Pressable onPress={() => setIsScenicOpen(false)} className="flex-1 rounded-xl bg-[#1890FF] py-3">
+            <Text className="text-center text-sm font-semibold text-white">完成</Text>
+          </Pressable>
+        </View>
+      </FilterBottomSheet>
+
+      <PriceStarPickerSheet
+        visible={isPriceOpen}
+        initial={priceDraft}
+        onClose={() => setIsPriceOpen(false)}
+        onConfirm={(next) => {
+          setPriceDraft(next);
+          const starPart = next.stars.join("、");
+          const pricePart = next.min === 0 && next.max === 800 ? "" : next.max === 800 ? `¥${next.min}-¥800+` : `¥${next.min}-¥${next.max}`;
+          const merged = [pricePart, starPart].filter(Boolean).join(", ");
+          setPriceStar(merged || "不限星级");
+          setIsPriceOpen(false);
+        }}
+      />
+
+      <FilterBottomSheet visible={isTagOpen} title="标签" onClose={() => setIsTagOpen(false)}>
+        <View className="mt-1 flex-row flex-wrap gap-2">
+          {TAG_OPTIONS.map((item) => {
+            const active = tagList.includes(item);
+            return (
+              <Pressable
+                key={item}
+                onPress={() => {
+                  const next = active ? tagList.filter((x) => x !== item) : [...tagList, item];
+                  setTags(next.join(","));
+                }}
+                className={`rounded-full px-3 py-2 ${active ? "bg-[#E6F4FF]" : "border border-slate-200 bg-white"}`}
+              >
+                <Text className={`text-xs ${active ? "text-[#1890FF]" : "text-slate-600"}`}>{item}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View className="mt-4 flex-row items-center gap-3">
+          <Pressable onPress={() => setTags("")} className="flex-1 rounded-xl border border-slate-200 py-3">
+            <Text className="text-center text-sm font-semibold text-slate-600">清空</Text>
+          </Pressable>
+          <Pressable onPress={() => setIsTagOpen(false)} className="flex-1 rounded-xl bg-[#1890FF] py-3">
+            <Text className="text-center text-sm font-semibold text-white">完成</Text>
+          </Pressable>
+        </View>
+      </FilterBottomSheet>
     </>
   );
 }

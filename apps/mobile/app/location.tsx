@@ -8,9 +8,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import TopNavBar from "@/components/ui/top-nav-bar";
 
 const HOT_CITIES = ["扬州", "上海", "南京", "杭州"];
 const HOT_AREAS = ["外滩", "陆家嘴", "西湖", "新街口", "夫子庙", "瘦西湖"];
@@ -27,8 +27,7 @@ const SUGGESTIONS = [
 
 export default function LocationScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { city, location, from, checkIn, checkOut, priceStar, tags } = useLocalSearchParams<{
+  const { city, location, from, checkIn, checkOut, priceStar, tags, scenicSpots, sort, rooms, adults, children } = useLocalSearchParams<{
     city?: string;
     location?: string;
     from?: "home" | "list";
@@ -36,6 +35,11 @@ export default function LocationScreen() {
     checkOut?: string;
     priceStar?: string;
     tags?: string;
+    scenicSpots?: string;
+    sort?: "price_asc" | "price_desc" | "star_desc";
+    rooms?: string;
+    adults?: string;
+    children?: string;
   }>();
   const inputRef = useRef<TextInput>(null);
   const [keyword, setKeyword] = useState("");
@@ -56,11 +60,23 @@ export default function LocationScreen() {
     }
   }, [location]);
 
+  const handleBack = () => {
+    // 返回优先走导航栈，确保返回动画方向与进入方向相反。
+    try {
+      router.back();
+      return;
+    } catch {}
+    router.replace("/");
+  };
+
   const navigateWithSelection = (nextCity: string, nextLocation: string) => {
-    // from=list 时回到列表继续筛选；否则回首页
+    // from=list 时回到列表继续筛选；否则回首页。使用 replace 保持返回链路单一。
     const targetPath = from === "list" ? "/list" : "/";
     if (targetPath === "/list") {
-      router.navigate({
+      const prevTag = String(tags ?? "").trim();
+      const nextKeyword = String(nextLocation || "").trim();
+      const nextTags = prevTag && nextKeyword === prevTag ? prevTag : "";
+      router.replace({
         pathname: "/list",
         params: {
           city: nextCity,
@@ -68,12 +84,17 @@ export default function LocationScreen() {
           checkIn: checkIn ?? "",
           checkOut: checkOut ?? "",
           priceStar: priceStar ?? "",
-          tags: tags ?? "",
+          tags: nextTags,
+          rooms: rooms ?? "",
+          adults: adults ?? "",
+          children: children ?? "",
+          scenicSpots: scenicSpots ?? "",
+          sort: sort ?? "",
         },
       });
       return;
     }
-    router.navigate({
+    router.replace({
       pathname: "/",
       params: { city: nextCity, location: nextLocation },
     });
@@ -81,7 +102,7 @@ export default function LocationScreen() {
 
   const handleSubmit = () => {
     if (!keyword.trim()) {
-      router.back();
+      handleBack();
       return;
     }
     navigateWithSelection(city ?? "扬州", keyword.trim());
@@ -125,13 +146,9 @@ export default function LocationScreen() {
   }, [keyword]);
 
   return (
-    <View className="flex-1 bg-white px-4" style={{ paddingTop: insets.top + 12 }}>
-      <View className="flex-row items-center justify-between">
-        <Text className="text-lg font-semibold text-slate-900">地点选择 / 定位</Text>
-        <Pressable onPress={() => router.back()}>
-          <Text className="text-sm text-[#1890FF]">返回</Text>
-        </Pressable>
-      </View>
+    <View className="flex-1 bg-white">
+      <TopNavBar title="地点选择 / 定位" onBack={handleBack} />
+      <View className="px-4">
 
       <View className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
         <TextInput
@@ -227,6 +244,7 @@ export default function LocationScreen() {
           </View>
         </>
       )}
+      </View>
     </View>
   );
 }

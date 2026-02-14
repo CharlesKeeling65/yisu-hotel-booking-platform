@@ -27,9 +27,9 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="list" options={{ headerShown: false, title: '酒店列表' }} />
-        <Stack.Screen name="hotel/[id]" options={{ headerShown: false, title: '酒店详情' }} />
-        <Stack.Screen name="location" options={{ headerShown: false, title: '位置选择' }} />
+        <Stack.Screen name="list" options={{ headerShown: false, title: '酒店列表', animation: 'slide_from_right' }} />
+        <Stack.Screen name="hotel/[id]" options={{ headerShown: false, title: '酒店详情', animation: 'slide_from_right' }} />
+        <Stack.Screen name="location" options={{ headerShown: false, title: '位置选择', animation: 'slide_from_right' }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: '更多功能' }} />
       </Stack>
       <StatusBar style="auto" />
