@@ -529,9 +529,27 @@ async function queryHotels(req) {
   }
 
   if (q.keyword) {
-    where.push('(b.name_cn LIKE ? OR b.name_en LIKE ? OR b.address LIKE ? OR b.scenic_spots LIKE ?)');
+    where.push(`(
+      b.name_cn LIKE ?
+      OR b.name_en LIKE ?
+      OR b.address LIKE ?
+      OR b.scenic_spots LIKE ?
+      OR EXISTS (
+        SELECT 1
+        FROM \`Hotel_Label_Rel\` rel
+        JOIN \`Facility_Label\` l ON rel.label_id = l.id
+        WHERE rel.hotel_id = b.id
+          AND (l.label_name LIKE ? OR l.label_code LIKE ?)
+      )
+    )`);
     const kw = `%${String(q.keyword).trim()}%`;
-    params.push(kw, kw, kw, kw);
+    params.push(kw, kw, kw, kw, kw, kw);
+  }
+
+  const scenicSpots = normalizeTextList(q.scenicSpots);
+  if (scenicSpots.length) {
+    where.push(`(${scenicSpots.map(() => 'b.scenic_spots LIKE ?').join(' OR ')})`);
+    scenicSpots.forEach((spot) => params.push(`%${spot}%`));
   }
 
   if (q.starMin !== undefined && q.starMin !== '') {
@@ -541,6 +559,27 @@ async function queryHotels(req) {
   if (q.starMax !== undefined && q.starMax !== '') {
     where.push('b.star_level <= ?');
     params.push(parseIntSafe(q.starMax, 5));
+  }
+  const stars = normalizeTextList(q.stars)
+    .map((x) => parseIntSafe(x, 0))
+    .filter((x) => Number.isFinite(x) && x >= 1 && x <= 5);
+  if (stars.length) {
+    where.push(`b.star_level IN (${stars.map(() => '?').join(',')})`);
+    params.push(...stars);
+  }
+
+  const tags = normalizeTextList(q.tags).map((x) => x.toLowerCase());
+  for (const tag of tags) {
+    // 每个标签都要求命中（AND 关系），支持 label_name / label_code 模糊匹配
+    where.push(`EXISTS (
+      SELECT 1
+      FROM \`Hotel_Label_Rel\` rel
+      JOIN \`Facility_Label\` l ON rel.label_id = l.id
+      WHERE rel.hotel_id = b.id
+        AND (LOWER(l.label_name) LIKE ? OR LOWER(l.label_code) LIKE ?)
+    )`);
+    const t = `%${tag}%`;
+    params.push(t, t);
   }
 
   const [rows] = await pool.query(
@@ -554,14 +593,6 @@ async function queryHotels(req) {
 
   const rel = await getHotelRelations(rows.map((r) => r.id));
   let data = rows.map((r) => toHotel(r, r, rel));
-
-  const tags = normalizeTextList(q.tags).map((x) => x.toLowerCase());
-  if (tags.length) {
-    data = data.filter((item) => {
-      const all = [...item.labels, ...item.labelCodes].map((x) => String(x || '').toLowerCase());
-      return tags.every((t) => all.some((x) => x.includes(t)));
-    });
-  }
 
   if (q.priceMin !== undefined && q.priceMin !== '') {
     const min = parseFloatSafe(q.priceMin, 0);
@@ -1135,13 +1166,11 @@ app.get('/api/mobile/hotels', async (req, res) => {
   try {
     req.query.scope = 'public';
     const result = await queryHotels(req);
+    const hotelIds = result.records.map((item) => item.id);
+    const rel = await getHotelRelations(hotelIds);
     const data = [];
     for (const item of result.records) {
-      const rel = await getHotelRelations([item.id]);
-      const [roomRows] = await pool.query(
-        'SELECT id, name, price, occupancy, breakfast_included, refundable FROM `Room` WHERE hotel_id = ? ORDER BY price ASC',
-        [item.id]
-      );
+      const roomRows = rel.roomsByHotel[item.id] || [];
       data.push({
         id: item.id,
         name: item.name,
