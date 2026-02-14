@@ -8,10 +8,12 @@
 import { Image } from 'expo-image'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import DateRangePickerSheet from '@/components/hotel/DateRangePickerSheet'
+import GuestCompactBadge from '@/components/hotel/GuestCompactBadge'
+import GuestPickerSheet, { GuestDraft } from '@/components/hotel/GuestPickerSheet'
 import RoomList from '@/components/hotel/RoomList'
 import MeasuredPagingCarousel from '@/components/ui/measured-paging-carousel'
 import { fetchMobileHotelById } from '@/lib/api'
@@ -59,6 +61,7 @@ function getDisplayAddress(hotel?: Hotel | null) {
 export default function HotelDetailScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
+  const { width } = useWindowDimensions()
   const defaultSession = getDefaultSearchSession()
 
   const { id, checkIn, checkOut, from, city, location, priceStar, tags, scenicSpots, sort, rooms, adults, children } = useLocalSearchParams<{
@@ -82,13 +85,20 @@ export default function HotelDetailScreen() {
   const [error, setError] = useState('')
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
+  const [isGuestOpen, setIsGuestOpen] = useState(false)
   const [checkInDate, setCheckInDate] = useState(checkIn || defaultSession.checkIn)
   const [checkOutDate, setCheckOutDate] = useState(checkOut || defaultSession.checkOut)
+  const [roomCount, setRoomCount] = useState(Math.max(1, Number(rooms || defaultSession.rooms || 1)))
+  const [adultCount, setAdultCount] = useState(Math.max(Math.max(1, Number(adults || defaultSession.adults || 1)), Math.max(1, Number(rooms || defaultSession.rooms || 1))))
+  const [childCount, setChildCount] = useState(Math.max(0, Number(children || defaultSession.children || 0)))
 
   const nights = useMemo(() => {
     const diff = Math.ceil((new Date(checkOutDate).getTime() - new Date(checkInDate).getTime()) / (1000 * 60 * 60 * 24))
     return Math.max(1, diff)
   }, [checkInDate, checkOutDate])
+  const weekFontSize = width < 380 ? 10 : 11
+  const dateFontSize = width < 380 ? 14 : 15
+  const nightsFontSize = width < 380 ? 11 : 12
 
   const images = useMemo(() => {
     if (!hotel) return ['https://picsum.photos/seed/hotel_detail_fallback/1400/700']
@@ -138,9 +148,9 @@ export default function HotelDetailScreen() {
           checkOut: checkOutDate,
           priceStar: priceStar ?? '',
           tags: tags ?? '',
-          rooms: rooms ?? '',
-          adults: adults ?? '',
-          children: children ?? '',
+          rooms: String(roomCount),
+          adults: String(adultCount),
+          children: String(childCount),
           scenicSpots: scenicSpots ?? '',
           sort: sort ?? ''
         }
@@ -156,15 +166,15 @@ export default function HotelDetailScreen() {
       location: location || '',
       checkIn: checkInDate,
       checkOut: checkOutDate,
-      rooms: Math.max(1, Number(rooms || '1')),
-      adults: Math.max(Math.max(1, Number(adults || '1')), Math.max(1, Number(rooms || '1'))),
-      children: Math.max(0, Number(children || '0')),
+      rooms: roomCount,
+      adults: Math.max(adultCount, roomCount),
+      children: childCount,
       priceStar: priceStar || '不限星级',
       tags: tags || '',
       scenicSpots: scenicSpots || '',
       sort: sort || ''
     })
-  }, [city, location, checkInDate, checkOutDate, rooms, adults, children, priceStar, tags, scenicSpots, sort])
+  }, [city, location, checkInDate, checkOutDate, roomCount, adultCount, childCount, priceStar, tags, scenicSpots, sort])
 
   if (loading)
     return (
@@ -193,11 +203,11 @@ export default function HotelDetailScreen() {
 
         <View className="px-4 pt-4">
           <View className="flex-1 pr-3">
-            <View className="flex-row flex-wrap items-end">
+            <View className="flex-row items-center justify-between">
               <Text className="text-2xl font-semibold text-neutral-900">{hotel.name}</Text>
-              {hotel.nameEn ? <Text className="ml-2 text-sm text-neutral-500">{hotel.nameEn}</Text> : null}
+              <Text className="text-sm tracking-[1px] text-amber-600">{starText}</Text>
             </View>
-            <Text className="mt-1 text-sm tracking-[1px] text-amber-600">{starText}</Text>
+            {hotel.nameEn ? <Text className="mt-0 text-sm text-neutral-500">{hotel.nameEn}</Text> : null}
           </View>
 
           <Text className="mt-2 text-sm text-neutral-500">{getDisplayAddress(hotel)}</Text>
@@ -210,37 +220,42 @@ export default function HotelDetailScreen() {
             ))}
           </View>
 
-          <Pressable className="mt-5 rounded-2xl border border-[#BFDFFF] bg-[#F8FCFF] px-3 py-3" onPress={() => setIsCalendarOpen(true)}>
-            <View className="flex-row items-center justify-between">
-              <Text className="text-xs font-semibold text-[#4D6B80]">入住日期与间夜</Text>
-              <Text className="text-[11px] text-[#7FA2BA]">点击修改</Text>
-            </View>
-            <View className="mt-1.5 flex-row items-center">
-              <Text className="text-base font-semibold text-[#183B56]">{toCnMonthDay(checkInDate)}</Text>
-              <Text className="ml-1 text-xs text-[#6B8FA8]">{getDateMetaLabel(checkInDate)}</Text>
-              <Text className="mx-2 text-xs font-medium text-[#8FA8BA]">-</Text>
-              <Text className="text-base font-semibold text-[#183B56]">{toCnMonthDay(checkOutDate)}</Text>
-              <Text className="ml-1 text-xs text-[#6B8FA8]">{getDateMetaLabel(checkOutDate)}</Text>
-              <Text className="ml-4 text-xs font-semibold text-[#245F8B]">共{nights}晚</Text>
-            </View>
-          </Pressable>
-
-          <View className="mt-6">
-            <Text className="text-base font-semibold text-neutral-900">酒店设施</Text>
-            <View className="mt-3 flex-row flex-wrap gap-2">
-              {(hotel.facilities || []).map(facility => (
-                <View key={facility} className="rounded-full bg-white px-3 py-2 shadow-sm">
-                  <Text className="text-xs text-neutral-600">{facility}</Text>
+          <View className="mt-5 flex-row items-center gap-2">
+            <Pressable className="h-14 min-w-0 flex-[7] rounded-xl border border-[#D8E8FA] bg-[#F7FBFF] px-2.5 py-2 justify-center" onPress={() => setIsCalendarOpen(true)}>
+                <View className="flex-row items-center justify-between">
+                  <View className="min-w-0 flex-1 flex-row items-end">
+                    <View className="min-w-0 items-start">
+                      <Text style={{ fontSize: weekFontSize, color: '#6B8FA8' }} numberOfLines={1}>
+                        {getDateMetaLabel(checkInDate)}
+                      </Text>
+                      <Text className="mt-0.5 font-semibold text-[#183B56]" style={{ fontSize: dateFontSize }} numberOfLines={1}>
+                        {toCnMonthDay(checkInDate)}
+                      </Text>
+                    </View>
+                    <Text className="mx-2 font-medium text-[#8FA8BA]" style={{ fontSize: dateFontSize, lineHeight: dateFontSize + 2 }}>
+                      -
+                    </Text>
+                    <View className="min-w-0 items-start">
+                      <Text style={{ fontSize: weekFontSize, color: '#6B8FA8' }} numberOfLines={1}>
+                        {getDateMetaLabel(checkOutDate)}
+                      </Text>
+                      <Text className="mt-0.5 font-semibold text-[#183B56]" style={{ fontSize: dateFontSize }} numberOfLines={1}>
+                        {toCnMonthDay(checkOutDate)}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text className="ml-2 shrink-0 font-semibold text-[#245F8B]" style={{ fontSize: nightsFontSize }}>
+                    {nights}晚
+                  </Text>
                 </View>
-              ))}
+            </Pressable>
+            <View className="h-14 flex-[3] rounded-xl border border-[#D8E8FA] bg-[#F7FBFF] px-1 justify-center">
+              <GuestCompactBadge rooms={roomCount} adults={adultCount} childCount={childCount} onPress={() => setIsGuestOpen(true)} flat />
             </View>
           </View>
 
-          <View className="mt-6">
-            <Text className="text-base font-semibold text-neutral-900">房型价格</Text>
-            <View className="mt-4">
-              <RoomList rooms={[...(hotel.rooms || [])].sort((a, b) => a.price - b.price)} />
-            </View>
+          <View className="mt-3">
+            <RoomList rooms={[...(hotel.rooms || [])].sort((a, b) => a.price - b.price)} />
           </View>
         </View>
 
@@ -252,6 +267,17 @@ export default function HotelDetailScreen() {
           onConfirm={({ checkInDate: nextCheckIn, checkOutDate: nextCheckOut }) => {
             setCheckInDate(nextCheckIn)
             setCheckOutDate(nextCheckOut)
+          }}
+        />
+        <GuestPickerSheet
+          visible={isGuestOpen}
+          initial={{ rooms: roomCount, adults: adultCount, children: childCount } satisfies GuestDraft}
+          onClose={() => setIsGuestOpen(false)}
+          onConfirm={next => {
+            setRoomCount(next.rooms)
+            setAdultCount(Math.max(next.adults, next.rooms))
+            setChildCount(next.children)
+            setIsGuestOpen(false)
           }}
         />
       </ScrollView>
