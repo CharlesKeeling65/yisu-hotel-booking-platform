@@ -12,8 +12,8 @@ const config = getDefaultConfig(projectRoot);
 // 这一步是让 Metro 能读到根目录的 node_modules (关键修复)
 config.watchFolders = [workspaceRoot];
 config.resolver.nodeModulesPaths = [
-    path.resolve(projectRoot, "node_modules"),
-    path.resolve(workspaceRoot, "node_modules"),
+  path.resolve(projectRoot, "node_modules"),
+  path.resolve(workspaceRoot, "node_modules"),
 ];
 
 module.exports = withNativeWind(config, {
