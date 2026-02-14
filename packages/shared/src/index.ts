@@ -6,17 +6,23 @@ export type Room = {
   bedType: string;
   breakfastIncluded: boolean;
   refundable: boolean;
+  image?: string;
 };
 
 export type Hotel = {
   id: string;
   name: string;
+  nameEn?: string;
   city: string;
+  county?: string;
   rating: number;
+  starLevel?: number;
   address: string;
+  fullAddress?: string;
   coverImage: string;
   images: string[];
   tags: string[];
+  scenicSpots?: string[];
   facilities: string[];
   priceFrom: number;
   rooms: Room[];

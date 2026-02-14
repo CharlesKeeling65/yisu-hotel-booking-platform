@@ -1,554 +1,67 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    font-family: "Microsoft YaHei", sans-serif;
+* { box-sizing: border-box; }
+
+.hotel-detail-page {
+  min-height: 100vh;
+  background: #f4f8fb;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
 }
-body {
-    background: #f5f7fa;
-    color: #333;
-    padding-top: 80px; /* 给顶部80px固定导航留空间 */
-}
-/* 顶部导航栏 - 保留你修改的渐变/内边距，补充明确高度避免布局偏差 */
+
 .top-nav {
-    background: linear-gradient(100deg, #6a85b6 0%, #8b9abc 100%);
-    color: #fff;
-    padding: 0 32px; /* 左右内边距，内容不贴边 */
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    position: fixed;
-    left: 0;
-    right: 0;
-    top: 0;
-    z-index: 9999;
-    height: 80px; /* 明确高度，吸顶计算无偏差 */
-}
-.nav-logo {
-    display: flex;
-    align-items: center;
-    font-size: 20px;
-    font-weight: 600;
-}
-.nav-logo .logo-icon {
-    width: 28px;
-    height: 28px;
-    background: rgba(255,255,255,0.2);
-    border-radius: 4px;
-    margin-right: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-}
-.logout-btn {
-    padding: 6px 16px;
-    background: rgba(255,255,255,0.2);
-    border: none;
-    border-radius: 4px;
-    color: #fff;
-    cursor: pointer;
-    transition: background 0.3s;
-}
-.logout-btn:hover {
-    background: rgba(255,255,255,0.3);
-}
-/* 主容器（仅针对 HotelDetail 页面）- 核心！彻底锁定纯左右布局，永不改变 */
-.hotel-detail-page .container {
-    max-width: 1400px;
-    margin: 32px auto;
-    padding: 0 32px;
-    display: flex;
-    flex-direction: row !important; /* 强制横向，最高优先级，永不上下 */
-    flex-wrap: nowrap !important;    /* 强制不换行，子元素永不挤到下一行 */
-    gap: 24px;                       /* 左右固定间距，彻底避免重叠 */
-    align-items: flex-start;
-    min-height: calc(100vh - 112px); /* 占满视口剩余高度，布局更稳定 */
-    width: 100%;
-}
-/* 左侧导航栏 - 强制固定180px宽度，不拉伸/不收缩，吸顶优化 */
-.tab-nav {
-    width: 180px;
-    flex: 0 0 180px !important; /* 核心：固定宽度，永不拉伸/收缩 */
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-    overflow: hidden;
-    position: sticky;
-    top: 96px; /* 80px导航 + 16px间距，吸顶不遮挡 */
-    align-self: flex-start;
-    height: fit-content;
-}
-.tab-item {
-    padding: 18px 24px;
-    font-size: 16px;
-    cursor: pointer;
-    border-left: 4px solid transparent;
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.tab-item.active {
-    background: rgba(64, 158, 255, 0.1);
-    color: #409eff;
-    border-left-color: #409eff;
-    font-weight: 600;
-}
-.tab-item:hover {
-    background: #f8f9fa;
-}
-/* 右侧内容区 - 强制占满剩余所有宽度，不收缩/不挤压 */
-.tab-content {
-    flex: 1 0 auto !important; /* 核心：只占剩余宽度，永不收缩 */
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-    padding: 28px;
-    min-height: 600px;
-}
-.content-title {
-    font-size: 20px;
-    font-weight: 600;
-    margin-bottom: 24px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid #f0f0f0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.content-title .hotel-name {
-    font-size: 20px;
-    font-weight: 600;
-}
-/* 顶部返回和删除按钮行 */
-.back-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: #409eff;
-    cursor: pointer;
-    font-size: 14px;
-    margin-bottom: 16px;
-    background: transparent;
-    border: none;
-}
-#deleteHotelBtn {
-    padding: 6px 12px;
-    border-radius: 4px;
-    font-size: 14px;
-    border: none;
-    cursor: pointer;
-    background: #f56c6c;
-    color: #fff;
-    margin-left: 8px;
-}
-/* 1. 酒店基本情况样式 - 完全保留原有设计 */
-.base-info {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 20px;
-}
-.info-item {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-.info-label {
-    font-size: 14px;
-    color: #666;
-    font-weight: 500;
-}
-.info-value {
-    font-size: 16px;
-    color: #333;
-    line-height: 1.5;
-}
-.info-value.en {
-    color: #999;
-    font-size: 14px;
-    margin-top: 4px;
-}
-.tag-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-}
-.tag {
-    padding: 4px 12px;
-    background: #f5f7fa;
-    border-radius: 20px;
-    font-size: 12px;
-    color: #666;
-}
-.tag.hot {
-    background: rgba(250, 128, 114, 0.1);
-    color: #fa8072;
-}
-.discount-tag {
-    background: rgba(245, 108, 108, 0.1);
-    color: #f56c6c;
-    border: 1px solid #f56c6c;
-}
-/* 顶部主图 + 标题行 */
-.hero-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 24px;
-    margin-bottom: 24px;
-}
-/* 酒店主图（单张，按比例缩放） */
-.image-hero {
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-    background: #f8f9fa;
-    flex: 0 0 48%;
-    aspect-ratio: 4 / 3;
-}
-.image-hero img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-}
-/* 酒店标题块（右侧） */
-.hotel-title-block {
-    flex: 1;
-    padding: 0 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-.hotel-title-cn {
-    font-size: 24px;
-    font-weight: 700;
-    color: #333;
-    margin-bottom: 6px;
-}
-.hotel-title-en {
-    font-size: 14px;
-    color: #999;
-}
-.hotel-subline {
-    font-size: 14px;
-    color: #666;
-    line-height: 1.6;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-.meta-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 10px;
-}
-.meta-chip {
-    padding: 4px 10px;
-    background: #f5f7fa;
-    border-radius: 16px;
-    font-size: 12px;
-    color: #666;
-}
-/* 图片下方：热门景点 + 交通两行 */
-.below-tags-row {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin: 20px 0 24px;
-}
-.below-line {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-.below-label {
-    font-size: 14px;
-    color: #666;
-    font-weight: 700;
-    min-width: 100px;
-}
-/* 2. 房价概览样式 - 参考图片设计，分概览卡片+房价表格 */
-.price-overview {
-    width: 100%;
-}
-/* 房价概览统计卡片 - 与原有统计风格统一 */
-.price-stats {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-}
-.price-stat-card {
-    flex: 1;
-    min-width: 180px;
-    padding: 16px;
-    background: #f8f9fa;
-    border-radius: 8px;
-    text-align: center;
-}
-.price-stat-num {
-    font-size: 24px;
-    font-weight: 700;
-    color: #f56c6c;
-    margin: 8px 0;
-}
-.price-stat-label {
-    font-size: 14px;
-    color: #666;
-}
-.price-stat-num.avg {
-    color: #409eff;
-}
-.price-stat-num.rate {
-    color: #67c23a;
-}
-/* 房型图片缩略图 */
-.room-thumb {
-    width: 100px;
-    aspect-ratio: 16 / 9;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    background: #f8fafc;
-    overflow: hidden;
-    display: grid;
-    place-items: center;
-}
-.room-thumb img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-.thumb-empty { font-size: 12px; color: #999; }
-/* 弹窗图片预览与选择 */
-.image-preview-box {
-    grid-column: 1 / -1;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-.image-preview {
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    background: #f8fafc;
-    overflow: hidden;
-    display: grid;
-    place-items: center;
-}
-.image-preview img { width: 100%; height: 100%; object-fit: cover; }
-.file-tip { font-size: 12px; color: #999; }
-/* 房型操作按钮与弹窗 */
-.title-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.btn-mini {
-    padding: 6px 10px;
-    border-radius: 4px;
-    font-size: 13px;
-    border: none;
-    cursor: pointer;
-}
-.btn-primary-mini { background: #409eff; color: #fff; }
-.btn-default-mini { background: #f5f7fa; color: #666; border: 1px solid #dcdcdc; }
-.btn-primary-mini:hover { background: #337ecc; }
-.btn-default-mini:hover { background: #eef2f7; }
-.action-mini { padding: 4px 8px; border-radius: 4px; font-size: 12px; border: none; cursor: pointer; }
-.action-mini.edit { background: #67c23a; color: #fff; }
-.action-mini.edit:hover { background: #529b2e; }
-.action-mini.delete { background: #f56c6c; color: #fff; }
-.action-mini.delete:hover { background: #dd4f4f; }
-.room-ops { display: flex; gap: 8px; }
-/* 弹窗 */
-.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; align-items: center; justify-content: center; z-index: 999; }
-.modal-card { width: 520px; max-width: 92%; max-height: 70vh; background: #fff; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); display: flex; flex-direction: column; }
-.modal-header { padding: 10px 14px; font-weight: 600; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
-.modal-body { padding: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; overflow-y: auto; }
-.modal-footer { padding: 10px 14px; border-top: 1px solid #f0f0f0; display: flex; justify-content: flex-end; gap: 10px; }
-.modal-item { display: flex; flex-direction: column; gap: 6px; }
-.modal-label { font-size: 13px; color: #666; }
-.modal-input, .modal-select { padding: 8px 10px; border: 1px solid #dcdcdc; border-radius: 4px; font-size: 14px; }
-/* 当日房价表格 - 适配价格展示，增加原价/折后价/房态列 */
-.price-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 16px;
-}
-.price-table th,
-.price-table td {
-    padding: 12px 16px;
-    text-align: left;
-    border-bottom: 1px solid #f0f0f0;
-    font-size: 14px;
-}
-.price-table th {
-    background: #f8f9fa;
-    font-weight: 600;
-    color: #666;
-}
-.price-table tr:hover {
-    background: #fafafa;
-}
-.price-original {
-    color: #999;
-    text-decoration: line-through;
-    font-size: 12px;
-    margin-right: 8px;
-}
-.price-current {
-    color: #f56c6c;
-    font-weight: 600;
-}
-.room-status {
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-}
-.room-status.available {
-    background: rgba(103, 194, 58, 0.1);
-    color: #67c23a;
-}
-.room-status.low {
-    background: rgba(250, 173, 20, 0.1);
-    color: #fad529;
-}
-.room-status.soldout {
-    background: rgba(245, 108, 108, 0.1);
-    color: #f56c6c;
-}
-/* 3. 当日订单情况样式 - 复用原有订单数据，优化表格列名和展示 */
-.order-list {
-    width: 100%;
-}
-/* 概览统计条 */
-.order-overview {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 16px;
-    margin-bottom: 16px;
-}
-.overview-item {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 12px 16px;
-}
-.overview-label {
-    font-size: 13px;
-    color: #666;
-}
-.overview-num {
-    font-size: 24px;
-    font-weight: 700;
-    color: #409eff;
-    margin-top: 6px;
-}
-.order-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 16px;
-}
-.order-table th,
-.order-table td {
-    padding: 12px 16px;
-    text-align: left;
-    border-bottom: 1px solid #f0f0f0;
-    font-size: 14px;
-}
-.order-table th {
-    background: #f8f9fa;
-    font-weight: 600;
-    color: #666;
-}
-.order-table tr:hover {
-    background: #fafafa;
-}
-.order-status {
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-}
-.order-status.checked {
-    background: rgba(103, 194, 58, 0.1);
-    color: #67c23a;
-}
-.order-status.pending {
-    background: rgba(250, 173, 20, 0.1);
-    color: #fad529;
-}
-.order-status.unchecked {
-    background: rgba(245, 108, 108, 0.1);
-    color: #f56c6c;
-}
-.order-amount {
-    color: #f56c6c;
-    font-weight: 600;
-}
-/* 订单状态下拉框样式 */
-.order-status-select {
-    padding: 4px 6px;
-    border: 1px solid #dcdcdc;
-    border-radius: 3px;
-    font-size: 13px;
-    color: #333;
-    background: #fff;
-}
-.order-status-select.unchecked {
-    background: rgba(64, 158, 255, 0.1);
-    color: #409eff;
-    border-color: rgba(64, 158, 255, 0.25);
-}
-.order-status-select.pending {
-    background: rgba(250, 173, 20, 0.1);
-    color: #fad529;
-    border-color: rgba(250, 173, 20, 0.25);
-}
-.order-status-select.checked {
-    background: rgba(103, 194, 58, 0.1);
-    color: #67c23a;
-    border-color: rgba(103, 194, 58, 0.25);
-}
-.order-status-select.canceled {
-    background: rgba(245, 108, 108, 0.1);
-    color: #f56c6c;
-    border-color: rgba(245, 108, 108, 0.25);
-}
-/* 空状态提示 - 统一样式 */
-.empty-tip {
-    text-align: center;
-    padding: 80px 0;
-    color: #999;
-    font-size: 16px;
-}
-.empty-tip i {
-    font-size: 48px;
-    margin-bottom: 16px;
-    display: block;
-}
-/* 仅做小屏幕友好优化 - 不改变左右布局，只优化内边距/表格滚动 */
-@media (max-width: 768px) {
-    .hotel-detail-page .container {
-        padding: 0 16px;
-        gap: 16px; /* 小屏幕缩小间距，避免内容挤爆 */
-    }
-    .tab-content {
-        padding: 16px; /* 小屏幕缩小内容区内边距 */
-    }
-    .price-table, .order-table {
-        display: block;
-        overflow-x: auto; /* 表格横向滚动，避免内容溢出 */
-    }
-    .top-nav {
-        padding: 0 16px; /* 小屏幕导航栏缩小内边距 */
-    }
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #0f4f76;
+  color: #fff;
+  padding: 14px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.nav-logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; }
+.logo-icon { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, #11a2ff, #2dd4bf); display: grid; place-items: center; }
+.logout-btn { border: 1px solid rgba(255,255,255,.4); color: #fff; background: transparent; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+
+.container { width: min(1200px, 100%); margin: 0 auto; padding: 18px; }
+.tab-content { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 10px 24px rgba(17, 64, 98, 0.09); }
+.back-btn { border: none; background: transparent; color: #0b77c4; cursor: pointer; margin-bottom: 8px; }
+
+.content-title { display: flex; justify-content: space-between; align-items: center; font-size: 22px; font-weight: 700; margin-bottom: 14px; color: #173c56; }
+.title-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn-mini { border: none; border-radius: 8px; padding: 6px 10px; color: #fff; cursor: pointer; }
+.btn-primary-mini { background: #0d9ad1; }
+.btn-danger-mini { background: #ef4444; }
+
+.hero-row { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; margin-bottom: 14px; }
+.image-hero { position: relative; border-radius: 12px; overflow: hidden; background: #eef4f8; aspect-ratio: 16 / 10; }
+.image-hero img { width: 100%; height: 100%; object-fit: cover; }
+.hero-arrow { position: absolute; top: 50%; transform: translateY(-50%); border: none; border-radius: 999px; width: 30px; height: 30px; background: rgba(0,0,0,.45); color: #fff; cursor: pointer; }
+.hero-arrow.left { left: 8px; }
+.hero-arrow.right { right: 8px; }
+
+.hotel-title-block { display: flex; flex-direction: column; gap: 8px; }
+.hotel-title-cn { font-size: 24px; font-weight: 700; color: #13354e; }
+.hotel-title-en { color: #72889a; font-size: 13px; }
+.hotel-subline { color: #4f687b; font-size: 13px; line-height: 1.45; }
+
+.tag-group { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.tag { background: #eaf4fb; color: #1f5e86; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+
+.content-sub-title { margin: 14px 0 8px; color: #173c56; }
+
+.price-table { width: 100%; border-collapse: collapse; }
+.price-table th, .price-table td { border-bottom: 1px solid #e3edf4; padding: 10px 8px; font-size: 13px; color: #385367; text-align: left; }
+.price-table th { color: #5c7488; background: #f7fbfe; }
+
+.room-thumb { width: 88px; }
+.room-thumb img { width: 88px; height: 56px; object-fit: cover; border-radius: 8px; }
+.thumb-empty { color: #9eb0bd; }
+.room-status.available { color: #059669; }
+.room-status.soldout { color: #ef4444; }
+.price-current { font-weight: 700; color: #1f5172; }
+.empty-tip { color: #7890a2; text-align: center; }
+
+@media (max-width: 900px) {
+  .hero-row { grid-template-columns: 1fr; }
+  .content-title { flex-direction: column; align-items: flex-start; gap: 8px; }
 }
