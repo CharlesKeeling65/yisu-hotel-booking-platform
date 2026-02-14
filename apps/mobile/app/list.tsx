@@ -1,3 +1,10 @@
+/**
+ * 列表页（搜索结果页）
+ * 关键能力：
+ * 1) 接收首页传入的查询参数并回填 UI
+ * 2) 支持排序与分页加载（FlatList onEndReached）
+ * 3) 顶部紧凑搜索条 + 日历弹层，支持二次筛选
+ */
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, Text, View } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
@@ -12,6 +19,7 @@ import type { Hotel } from "@yisu/shared";
 import { fetchMobileHotels } from "@/lib/api";
 
 const buildMarkedDates = (start: string, end: string) => {
+  // 与首页保持一致：生成“区间高亮”给 Calendar 组件
   if (!start || !end) return {};
   const marked: Record<string, { color: string; textColor: string; startingDay?: boolean; endingDay?: boolean }> = {};
   const startDate = new Date(start);
@@ -74,6 +82,7 @@ export default function ListScreen() {
   }, [params.city, params.location, params.keyword]);
 
   async function handleLocate() {
+    // 在列表页直接定位并重载结果，减少返回首页的操作成本
     if (locating) return;
     setLocating(true);
     try {
@@ -94,6 +103,7 @@ export default function ListScreen() {
   }
 
   async function load(targetPage: number, append: boolean) {
+    // 统一数据加载入口：既支持首次加载，也支持分页追加
     if (append) setLoadingMore(true); else setLoading(true);
     setError("");
     try {
@@ -118,6 +128,7 @@ export default function ListScreen() {
   }
 
   useEffect(() => {
+    // 任何检索条件变化都重跑首屏查询
     load(1, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [city, location, checkInDate, checkOutDate, priceStar, tags, sort]);

@@ -1,3 +1,9 @@
+/**
+ * 位置选择页
+ * 目标：
+ * - 提供“关键词搜索 + 热门推荐 + 一键定位”能力
+ * - 选中后，根据来源页面（首页/列表）回跳并带回参数
+ */
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -51,6 +57,7 @@ export default function LocationScreen() {
   }, [location]);
 
   const navigateWithSelection = (nextCity: string, nextLocation: string) => {
+    // from=list 时回到列表继续筛选；否则回首页
     const targetPath = from === "list" ? "/list" : "/";
     if (targetPath === "/list") {
       router.navigate({
@@ -85,6 +92,7 @@ export default function LocationScreen() {
   };
 
   const handleLocate = async () => {
+    // 获取真实地理位置并转成人可读地址
     setErrorText("");
     setLocating(true);
     try {
@@ -111,6 +119,7 @@ export default function LocationScreen() {
   };
 
   const suggestions = useMemo(() => {
+    // 简单前端联想：基于静态数据做包含匹配
     if (!keyword.trim()) return [];
     return SUGGESTIONS.filter((item) => item.label.includes(keyword.trim()));
   }, [keyword]);

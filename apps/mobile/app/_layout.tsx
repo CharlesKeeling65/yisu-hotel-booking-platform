@@ -1,3 +1,13 @@
+/**
+ * 根路由布局（Root Layout）
+ * 作用：
+ * 1) 挂载全局主题（亮色/暗色）
+ * 2) 定义整个 App 的主导航栈（Stack）
+ * 3) 注册全局样式与状态栏
+ *
+ * 学习建议：
+ * - 新增一个页面时，先在 app 目录创建文件，再根据是否需要显式控制 header 在这里配置 Screen options。
+ */
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';

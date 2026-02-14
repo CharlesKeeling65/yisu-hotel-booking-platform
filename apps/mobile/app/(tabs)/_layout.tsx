@@ -1,3 +1,10 @@
+/**
+ * 底部标签栏布局（Tabs Layout）
+ * 作用：
+ * - 定义四个主 Tab：查询、购物车、点评、我的
+ * - 为每个 Tab 配置标题与图标
+ * - 统一接入触感反馈按钮（HapticTab）
+ */
 import { Tabs } from 'expo-router';
 
 import { HapticTab } from '@/components/haptic-tab';

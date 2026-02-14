@@ -1,3 +1,10 @@
+/**
+ * 酒店详情页
+ * 核心流程：
+ * 1) 根据路由 id 拉取单酒店详情
+ * 2) 轮播展示酒店图片
+ * 3) 展示设施与房型，并支持改入住日期
+ */
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -10,6 +17,7 @@ import type { Hotel } from "@yisu/shared";
 import { fetchMobileHotelById } from "@/lib/api";
 
 const buildMarkedDates = (start: string, end: string) => {
+  // 构建日期区间高亮，供详情页日历弹层复用
   if (!start || !end) return {};
   const marked: Record<string, { color: string; textColor: string; startingDay?: boolean; endingDay?: boolean }> = {};
   const startDate = new Date(start);
@@ -27,6 +35,7 @@ const buildMarkedDates = (start: string, end: string) => {
 };
 
 function toCnMonthDay(s: string) {
+  // 将 yyyy-mm-dd 转为 mm月dd日，提升可读性
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return s;
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -65,6 +74,7 @@ export default function HotelDetailScreen() {
   }, [hotel]);
 
   useEffect(() => {
+    // 首次进入与 id 变化时，重新请求酒店详情
     if (!id) return;
     let mounted = true;
     setLoading(true);
@@ -89,6 +99,7 @@ export default function HotelDetailScreen() {
   }, [id]);
 
   useEffect(() => {
+    // 自动轮播酒店图片
     if (!images.length) return;
     const timer = setInterval(() => {
       const next = (bannerIndex + 1) % images.length;

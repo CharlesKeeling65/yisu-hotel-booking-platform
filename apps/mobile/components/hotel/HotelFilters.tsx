@@ -1,3 +1,7 @@
+/**
+ * 列表排序条
+ * 本地维护 active 标签；变更后将排序值通过 onChange 通知父组件触发重查。
+ */
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 

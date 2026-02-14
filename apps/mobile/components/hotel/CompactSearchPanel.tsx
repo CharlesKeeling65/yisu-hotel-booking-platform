@@ -1,3 +1,9 @@
+/**
+ * 列表页搜索面板（紧凑版本）
+ * 与 SearchPanel 的区别：
+ * - 信息层级更紧凑，适合 sticky header 场景
+ * - 保留核心筛选能力（城市/位置/日期/搜索）
+ */
 import { Pressable, Text, View } from "react-native";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";

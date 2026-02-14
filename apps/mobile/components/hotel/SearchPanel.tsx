@@ -1,3 +1,9 @@
+/**
+ * 首页搜索面板（完整版本）
+ * 职责：
+ * - 承载酒店搜索的主要输入项
+ * - 通过 props 回调把交互事件上抛给页面容器处理
+ */
 import { Pressable, Text, View } from "react-native";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 
@@ -23,6 +29,7 @@ type Props = {
 };
 
 const formatMonthDay = (dateString: string) => {
+  // UI 只显示“月/日”，避免输入区信息密度过高
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) return dateString;
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -31,6 +38,7 @@ const formatMonthDay = (dateString: string) => {
 };
 
 function Stepper({ label, value, onSub, onAdd }: { label: string; value: number; onSub: () => void; onAdd: () => void }) {
+  // 数量步进器是纯展示+交互组件，具体 state 在父组件管理
   return (
     <View className="min-w-[96px] flex-1 rounded-2xl bg-[#F4F7FB] px-2 py-2">
       <Text className="text-center text-[11px] text-slate-500">{label}</Text>
@@ -73,8 +81,6 @@ export default function SearchPanel(props: Props) {
     <View className="rounded-3xl border border-slate-100 bg-white p-4 shadow-lg">
       <View className="flex-row items-center gap-2">
         <Text className="rounded-full bg-[#E6F4FF] px-3 py-1 text-xs font-semibold text-[#1890FF]">国内酒店</Text>
-        <Text className="text-xs text-slate-400">|</Text>
-        <Text className="text-xs text-slate-500">灵活筛选</Text>
       </View>
 
       <View className="mt-4 flex-row items-center rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">

@@ -1,3 +1,7 @@
+/**
+ * 点评占位页（Tab 子页）。
+ * 用于承接后续用户评价/评分模块。
+ */
 import { StyleSheet, Text, View } from 'react-native';
 
 export default function ReviewsScreen() {

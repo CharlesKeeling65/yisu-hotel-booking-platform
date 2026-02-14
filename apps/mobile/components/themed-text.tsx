@@ -1,3 +1,7 @@
+/**
+ * 主题文本组件：
+ * 按 light/dark 主题自动取色，并通过 type 快速切换常用文本样式。
+ */
 import { StyleSheet, Text, type TextProps } from 'react-native';
 
 import { useThemeColor } from '@/hooks/use-theme-color';

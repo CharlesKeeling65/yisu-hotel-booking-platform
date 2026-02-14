@@ -1,3 +1,7 @@
+/**
+ * 购物车占位页（Tab 子页）。
+ * 当前为最小实现，后续可替换为真实购物车状态管理与列表。
+ */
 import { StyleSheet, Text, View } from 'react-native';
 
 export default function CartScreen() {
