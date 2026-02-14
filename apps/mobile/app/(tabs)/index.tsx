@@ -14,12 +14,13 @@
 import { Image } from 'expo-image'
 import * as Location from 'expo-location'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native'
+import { useEffect, useMemo, useState } from 'react'
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native'
 import { Calendar, DateData } from 'react-native-calendars'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import SearchPanel from '@/components/hotel/SearchPanel'
+import MeasuredPagingCarousel from '@/components/ui/measured-paging-carousel'
 import { fetchMobileHomeBanners } from '@/lib/api'
 
 const QUICK_TAGS = ['亲子友好', '豪华酒店', '免费停车', '近地铁', '含早餐', '江景海景']
@@ -64,9 +65,6 @@ type HomeBanner = {
 export default function HomeScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { width } = useWindowDimensions()
-  const bannerWidth = Math.max(280, Math.round(width - 32))
-  const bannerRef = useRef<ScrollView | null>(null)
 
   const { location: locationParam, city: cityParam } = useLocalSearchParams<{ location?: string; city?: string }>()
 
@@ -81,7 +79,6 @@ export default function HomeScreen() {
   const [selectedTags, setSelectedTags] = useState<string[]>([])
 
   const [banners, setBanners] = useState<HomeBanner[]>([{ id: 'fallback', hotelId: '', title: '易宿精选酒店', subtitle: '品质酒店限时优惠', image: 'https://picsum.photos/seed/home_banner/1400/700' }])
-  const [bannerIndex, setBannerIndex] = useState(0)
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
   const [isStarOpen, setIsStarOpen] = useState(false)
@@ -99,17 +96,6 @@ export default function HomeScreen() {
       })
       .catch(() => {})
   }, [])
-
-  useEffect(() => {
-    // 自动轮播：定时滚动到下一张，并同步分页点
-    if (!banners.length) return
-    const timer = setInterval(() => {
-      const next = (bannerIndex + 1) % banners.length
-      bannerRef.current?.scrollTo({ x: next * bannerWidth, animated: true })
-      setBannerIndex(next)
-    }, 4800)
-    return () => clearInterval(timer)
-  }, [bannerIndex, banners.length, bannerWidth])
 
   useEffect(() => {
     if (typeof locationParam === 'string') setLocation(locationParam)
@@ -169,42 +155,27 @@ export default function HomeScreen() {
 
   return (
     <ScrollView className="flex-1 bg-[#F5F8FC]" contentContainerClassName="px-4 pb-24" style={{ paddingTop: insets.top + 8 }}>
-      <View className="overflow-hidden rounded-3xl bg-slate-200">
-        <ScrollView
-          ref={bannerRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          decelerationRate="fast"
-          bounces
-          onMomentumScrollEnd={e => {
-            const x = e.nativeEvent.contentOffset.x
-            const idx = Math.max(0, Math.min(banners.length - 1, Math.round(x / bannerWidth)))
-            setBannerIndex(idx)
-          }}>
-          {banners.map(banner => (
-            <Pressable
-              key={banner.id}
-              style={{ width: bannerWidth, height: 192 }}
-              onPress={() => {
-                if (banner.hotelId) router.push({ pathname: '/hotel/[id]', params: { id: banner.hotelId } })
-              }}>
-              <Image source={{ uri: banner.image }} style={{ width: '100%', height: 192 }} contentFit="cover" />
-              <View className="absolute inset-0 bg-black/25" />
-              <View className="absolute left-4 right-4 top-4">
-                <Text className="text-lg font-semibold text-white">{banner.title}</Text>
-                <Text className="mt-1 text-sm text-white/90">{banner.subtitle}</Text>
-              </View>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        <View className="absolute bottom-3 left-0 right-0 flex-row items-center justify-center gap-1">
-          {banners.map((_, idx) => (
-            <View key={idx} className={`h-1.5 w-4 rounded-full ${idx === bannerIndex ? 'bg-white' : 'bg-white/45'}`} />
-          ))}
-        </View>
-      </View>
+      <MeasuredPagingCarousel
+        data={banners}
+        autoPlayMs={4800}
+        slideHeight={192}
+        containerClassName="overflow-hidden rounded-3xl bg-slate-200"
+        keyExtractor={(banner) => banner.id}
+        renderSlide={(banner, _idx, width) => (
+          <Pressable
+            style={{ width, height: 192 }}
+            onPress={() => {
+              if (banner.hotelId) router.push({ pathname: '/hotel/[id]', params: { id: banner.hotelId } })
+            }}>
+            <Image source={{ uri: banner.image }} style={{ width, height: 192 }} contentFit="cover" />
+            <View className="absolute inset-0 bg-black/25" />
+            <View className="absolute left-4 right-4 top-4">
+              <Text className="text-lg font-semibold text-white">{banner.title}</Text>
+              <Text className="mt-1 text-sm text-white/90">{banner.subtitle}</Text>
+            </View>
+          </Pressable>
+        )}
+      />
 
       <View className="mt-4">
         <SearchPanel

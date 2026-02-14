@@ -7,12 +7,13 @@
  */
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import RoomList from "@/components/hotel/RoomList";
+import MeasuredPagingCarousel from "@/components/ui/measured-paging-carousel";
 import type { Hotel } from "@yisu/shared";
 import { fetchMobileHotelById } from "@/lib/api";
 
@@ -46,16 +47,12 @@ function toCnMonthDay(s: string) {
 export default function HotelDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const bannerWidth = Math.max(280, Math.round(width - 32));
-  const carouselRef = useRef<ScrollView | null>(null);
 
   const { id, checkIn, checkOut } = useLocalSearchParams<{ id: string; checkIn?: string; checkOut?: string }>();
 
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [bannerIndex, setBannerIndex] = useState(0);
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [stage, setStage] = useState<"checkIn" | "checkOut">("checkIn");
@@ -98,17 +95,6 @@ export default function HotelDetailScreen() {
     };
   }, [id]);
 
-  useEffect(() => {
-    // 自动轮播酒店图片
-    if (!images.length) return;
-    const timer = setInterval(() => {
-      const next = (bannerIndex + 1) % images.length;
-      carouselRef.current?.scrollTo({ x: next * bannerWidth, animated: true });
-      setBannerIndex(next);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [bannerIndex, images.length, bannerWidth]);
-
   if (loading) return <View className="flex-1 items-center justify-center bg-neutral-50"><Text className="text-base text-neutral-500">加载中...</Text></View>;
   if (!hotel) return <View className="flex-1 items-center justify-center bg-neutral-50"><Text className="text-base text-neutral-500">{error ? `加载失败：${error}` : "酒店不存在"}</Text></View>;
 
@@ -120,30 +106,16 @@ export default function HotelDetailScreen() {
         <View style={{ width: 56 }} />
       </View>
 
-      <View className="mt-3 overflow-hidden rounded-3xl mx-4 bg-slate-200">
-        <ScrollView
-          ref={carouselRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          decelerationRate="fast"
-          bounces
-          onMomentumScrollEnd={(e) => {
-            const x = e.nativeEvent.contentOffset.x;
-            const idx = Math.max(0, Math.min(images.length - 1, Math.round(x / bannerWidth)));
-            setBannerIndex(idx);
-          }}
-        >
-          {images.map((image, idx) => (
-            <Image key={`${idx}-${image}`} source={{ uri: image }} style={{ width: bannerWidth, height: 210 }} contentFit="cover" />
-          ))}
-        </ScrollView>
-        <View className="absolute bottom-3 left-0 right-0 flex-row items-center justify-center gap-1">
-          {images.map((_, idx) => (
-            <View key={idx} className={`h-1.5 w-4 rounded-full ${idx === bannerIndex ? "bg-white" : "bg-white/45"}`} />
-          ))}
-        </View>
-      </View>
+      <MeasuredPagingCarousel
+        data={images}
+        autoPlayMs={5000}
+        slideHeight={210}
+        containerClassName="mt-3 overflow-hidden rounded-3xl mx-4 bg-slate-200"
+        keyExtractor={(image, idx) => `${idx}-${image}`}
+        renderSlide={(image, _idx, width) => (
+          <Image source={{ uri: image }} style={{ width, height: 210 }} contentFit="cover" />
+        )}
+      />
 
       <View className="px-4 pt-4">
         <View className="flex-row items-center justify-between">
