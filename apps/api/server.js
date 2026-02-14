@@ -290,6 +290,15 @@ function toLegacyRoom(row = {}, image) {
   };
 }
 
+function inferBedType(name = '') {
+  const n = String(name || '').toLowerCase();
+  if (/(双床|双人床|twin)/.test(n)) return '双床';
+  if (/(大床|queen|king)/.test(n)) return '大床';
+  if (/(家庭|family)/.test(n)) return '家庭床';
+  if (/(榻榻米|tatami)/.test(n)) return '榻榻米';
+  return '标准床';
+}
+
 function toHotel(base, audit, rel) {
   const rooms = rel.roomsByHotel[base.id] || [];
   const images = rel.hotelImagesByHotel[base.id] || [];
@@ -1192,7 +1201,9 @@ app.get('/api/mobile/hotels', async (req, res) => {
           name: x.name,
           price: Number(x.price || 0),
           capacity: Number(x.occupancy || 2),
-          bedType: 'Queen',
+          bedType: inferBedType(x.name),
+          size: x.size ? Number(x.size) : null,
+          status: Number(x.status || 0) === 0 ? 'available' : 'soldout',
           breakfastIncluded: Number(x.breakfast_included || 0) === 1,
           refundable: Number(x.refundable || 1) === 1,
           image: rel.roomImageByRoom[x.id] || `https://picsum.photos/seed/room_${x.id}/800/500`,
@@ -1226,7 +1237,9 @@ app.get('/api/mobile/hotels/:id', async (req, res) => {
         name: x.name,
         price: Number(x.price || 0),
         capacity: Number(x.occupancy || 2),
-        bedType: 'Queen',
+        bedType: inferBedType(x.name),
+        size: x.size ? Number(x.size) : null,
+        status: Number(x.status || 0) === 0 ? 'available' : 'soldout',
         breakfastIncluded: Number(x.breakfast_included || 0) === 1,
         refundable: Number(x.refundable || 1) === 1,
         image: rel.roomImageByRoom[x.id] || `https://picsum.photos/seed/room_${x.id}/800/500`,
