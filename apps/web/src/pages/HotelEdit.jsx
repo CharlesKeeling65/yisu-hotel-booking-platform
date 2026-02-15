@@ -40,7 +40,7 @@ export default function HotelEdit() {
   const fileInputRef = useRef(null);
   const [hotel, setHotel] = useState(null);
   const [saving, setSaving] = useState(false);
-  const user = authUser();
+  const user = useMemo(() => authUser(), []);
 
   useEffect(() => {
     if (!user) {
