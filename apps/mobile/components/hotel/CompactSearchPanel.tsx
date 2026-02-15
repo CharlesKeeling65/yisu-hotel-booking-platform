@@ -8,6 +8,7 @@ import { Pressable, Text, View } from 'react-native'
 
 import GuestCompactBadge from '@/components/hotel/GuestCompactBadge'
 import { IconSymbol } from '@/components/ui/icon-symbol'
+import { stripCityCountySuffix } from '@/lib/location-utils'
 
 type Props = {
   city: string
@@ -59,6 +60,7 @@ const getDateMetaLabel = (dateString: string) => {
 }
 
 export default function CompactSearchPanel({ city, location, checkInDate, checkOutDate, nights, rooms, adults, childCount, onBackPress, onCityPress, onDatePress, onGuestPress, onSearch, onLocationPress, onLocationClearPress, onLocatePress, filterButtons = [], flat = false }: Props) {
+  const cityLabel = stripCityCountySuffix(city)
   return (
     <View className={flat ? '' : 'rounded-2xl border border-slate-100 bg-white p-2.5'}>
       <View className="flex-row items-center rounded-xl border border-slate-100 bg-slate-50 px-3 py-1.5">
@@ -72,7 +74,7 @@ export default function CompactSearchPanel({ city, location, checkInDate, checkO
         ) : null}
         <Pressable className="flex-row items-center" onPress={onCityPress}>
           <Text numberOfLines={1} className="max-w-[54px] text-sm font-semibold text-slate-900">
-            {city}
+            {cityLabel || city}
           </Text>
           <Text className="ml-1 text-xs text-slate-400">▼</Text>
         </Pressable>

@@ -6,6 +6,7 @@
  */
 import { IconSymbol } from '@/components/ui/icon-symbol'
 import { Pressable, ScrollView, Text, View } from 'react-native'
+import { stripCityCountySuffix } from '@/lib/location-utils'
 
 type Props = {
   city: string
@@ -57,12 +58,13 @@ export default function SearchPanel(props: Props) {
   const { city, location, checkInDate, checkOutDate, nights, rooms, adults, childCount, starLabel, onCityPress, onLocationPress, onLocationClearPress, onLocatePress, onDatePress, onGuestPress, onStarPress, onStarClearPress, onSearch, quickTags = [], onTagPress } = props
 
   const guestSummary = `${rooms}间房 ${adults}成人 ${childCount}儿童`
+  const cityLabel = stripCityCountySuffix(city)
 
   return (
     <View className="rounded-3xl border border-slate-100 bg-white p-4 shadow-lg">
       <View className="flex-row items-center rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
         <Pressable className="shrink-0 flex-row items-center justify-center pr-2" onPress={onCityPress}>
-          <Text className="text-center text-[15px] font-semibold text-slate-900">{city}</Text>
+          <Text className="text-center text-[15px] font-semibold text-slate-900">{cityLabel || city}</Text>
           <Text className="ml-1 text-xs text-slate-400">▼</Text>
         </Pressable>
         <Text className="mx-2 text-xs text-slate-300">|</Text>

@@ -20,7 +20,7 @@ function buildDefaultSession(): SearchSession {
   const tomorrow = new Date(today);
   tomorrow.setDate(today.getDate() + 1);
   return {
-    city: "上海市",
+    city: "上海",
     location: "",
     checkIn: toDateString(today),
     checkOut: toDateString(tomorrow),
