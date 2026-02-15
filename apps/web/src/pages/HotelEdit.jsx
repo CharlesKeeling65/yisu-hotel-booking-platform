@@ -23,6 +23,17 @@ function authUser() {
   }
 }
 
+function formatDateForInput(value) {
+  if (!value) return "";
+  try {
+    const d = new Date(value);
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    return String(value).slice(0, 10);
+  } catch (e) {
+    return String(value).slice(0, 10);
+  }
+}
+
 export default function HotelEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -69,7 +80,7 @@ export default function HotelEdit() {
           city: h.city || "",
           county: h.county || "",
           address: h.address || "",
-          openTime: h.openTime || "",
+          openTime: formatDateForInput(h.openTime || ""),
           starLevel: Number(h.starLevel || h.star || 4),
           intro: h.intro || "",
           scenicSpots: Array.isArray(h.scenicSpots) ? h.scenicSpots : [],
@@ -277,7 +288,7 @@ export default function HotelEdit() {
               <input
                 type="date"
                 className="form-input"
-                value={hotel.openTime}
+                value={formatDateForInput(hotel.openTime)}
                 onChange={(e) => updateField("openTime", e.target.value)}
               />
             </div>
