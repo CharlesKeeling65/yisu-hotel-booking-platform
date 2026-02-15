@@ -2,7 +2,7 @@ SET NAMES utf8mb4;
 SET CHARACTER SET utf8mb4;
 USE `yisu_db`;
 
--- 插入商家用户，确保 Hotel_Base 的 merchantId 引用存在（避免外键失败）
+-- modify 20260215 by yuchen.fan 插入商家用户，确保 Hotel_Base 的 merchantId 引用存在（避免外键失败）
 INSERT IGNORE INTO `User` (`id`,`account`,`email`,`phone`,`name`,`real_name`,`company_name`,`role`,`password`) VALUES
 ('merchant_001','m.shanghai','merchant.shanghai@yisu.com',NULL,'上海商家','张宁','沪上旅宿集团','merchant','Merchant#2026!SH'),
 ('merchant_002','m.beijing','merchant.beijing@yisu.com',NULL,'北京商家','陈璐','京华酒店管理','merchant','Merchant#2026!BJ'),
