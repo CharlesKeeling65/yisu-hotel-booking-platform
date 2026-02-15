@@ -1,3 +1,9 @@
+/**
+ * “我的”页面
+ * 功能：
+ * - 未登录态：展示登录入口与权益说明
+ * - 登录态：展示用户摘要、统计与资料信息
+ */
 import { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,6 +18,7 @@ const QUICK_STATS = [
 ];
 
 function InfoRow({ label, value }: { label: string; value: string }) {
+  // 信息行子组件，减少重复样式代码
   return (
     <View className="flex-row items-center justify-between border-b border-slate-100 py-3">
       <Text className="text-sm text-slate-500">{label}</Text>
@@ -36,6 +43,7 @@ export default function ProfileScreen() {
   });
 
   const handleLogin = async () => {
+    // 示例登录流程：调用 mobile API，成功后切换到登录态
     setError("");
     try {
       const data = await loginMobile(username.trim(), password);

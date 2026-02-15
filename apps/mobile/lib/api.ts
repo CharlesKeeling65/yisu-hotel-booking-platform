@@ -10,13 +10,30 @@ type ApiResponse<T> = {
   hasMore?: boolean;
 };
 
+export type ReverseGeocodePayload = {
+  provider: string;
+  reverse: Array<{
+    region?: string;
+    city?: string;
+    district?: string;
+    street?: string;
+    name?: string;
+    subregion?: string;
+    streetNumber?: string;
+  }>;
+};
+
 export type ListParams = {
   page?: number;
   pageSize?: number;
   city?: string;
   keyword?: string;
   priceStar?: string;
+  priceMin?: number;
+  priceMax?: number;
+  stars?: number[];
   tags?: string[];
+  scenicSpots?: string[];
   sort?: "price_asc" | "price_desc" | "star_desc";
 };
 
@@ -47,21 +64,27 @@ export async function fetchMobileHotels<T>(params: ListParams = {}) {
   search.set("pageSize", String(params.pageSize || 10));
   if (params.city) search.set("city", params.city);
   if (params.keyword) search.set("keyword", params.keyword);
+  if (params.priceMin !== undefined) search.set("priceMin", String(params.priceMin));
+  if (params.priceMax !== undefined) search.set("priceMax", String(params.priceMax));
+  if (params.stars?.length) {
+    search.set("stars", params.stars.join(","));
+  }
   if (params.priceStar) {
-    if (params.priceStar.includes("3")) {
+    if (!params.stars?.length && params.priceStar.includes("3")) {
       search.set("starMin", "3");
       search.set("starMax", "3");
     }
-    if (params.priceStar.includes("4")) {
+    if (!params.stars?.length && params.priceStar.includes("4")) {
       search.set("starMin", "4");
       search.set("starMax", "4");
     }
-    if (params.priceStar.includes("5")) {
+    if (!params.stars?.length && params.priceStar.includes("5")) {
       search.set("starMin", "5");
       search.set("starMax", "5");
     }
   }
   if (params.tags?.length) search.set("tags", params.tags.join(","));
+  if (params.scenicSpots?.length) search.set("scenicSpots", params.scenicSpots.join(","));
   if (params.sort) search.set("sort", params.sort);
 
   const res = await getJson<T[]>(`/api/mobile/hotels?${search.toString()}`);
@@ -88,4 +111,12 @@ export async function loginMobile(username: string, password: string) {
     }
   );
   return res.data ?? null;
+}
+
+export async function fetchReverseGeocode(lat: number, lon: number) {
+  const search = new URLSearchParams();
+  search.set("lat", String(lat));
+  search.set("lon", String(lon));
+  const res = await getJson<ReverseGeocodePayload>(`/api/geocode/reverse?${search.toString()}`);
+  return res.data ?? { provider: "none", reverse: [] };
 }

@@ -42,6 +42,101 @@ function normalizeTextList(value) {
   return [];
 }
 
+function normalizeRegionName(value) {
+  return String(value || '')
+    .trim()
+    .replace(/(省|市|县)$/g, '')
+    .toLowerCase();
+}
+
+const GEO_TIMEOUT_MS = Math.max(1200, Number(process.env.GEO_TIMEOUT_MS || 4500));
+const AMAP_WEB_KEY = String(process.env.AMAP_WEB_KEY || '');
+
+async function fetchJsonWithTimeout(url, init = {}, timeoutMs = GEO_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_e) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function reverseByNominatim(lat, lon) {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=zh-CN&lat=${lat}&lon=${lon}`;
+  const data = await fetchJsonWithTimeout(url, { headers: { Accept: 'application/json' } });
+  if (!data || typeof data !== 'object') return null;
+  const a = data.address || {};
+  // city: 优先县级市/城市名；不要优先使用地级市 region，避免前端回退时显示成“临汾”。
+  const city = a.city || a.town || a.county || a.region || '';
+  const district = a.county || a.city_district || a.suburb || a.city || '';
+  const street = a.road || '';
+  return {
+    provider: 'nominatim',
+    reverse: [{
+      city: city || '',
+      district: district || '',
+      region: a.state || '',
+      street: street || '',
+      name: data.name || '',
+    }],
+  };
+}
+
+async function reverseByBigDataCloud(lat, lon) {
+  const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=zh`;
+  const data = await fetchJsonWithTimeout(url);
+  if (!data || typeof data !== 'object') return null;
+  const admins = data.localityInfo?.administrative || [];
+  const prefecture = admins.find((x) => Number(x.adminLevel) === 5)?.name || '';
+  const countyLevel = admins.find((x) => Number(x.adminLevel) === 6)?.name || '';
+  const district = String(data.locality || countyLevel || '');
+  const city = String(data.city || prefecture || '');
+  return {
+    provider: 'bigdatacloud',
+    reverse: [{
+      region: String(data.principalSubdivision || ''),
+      city,
+      district: String(district || ''),
+      street: '',
+      name: '',
+    }],
+  };
+}
+
+async function reverseByAmap(lat, lon) {
+  if (!AMAP_WEB_KEY) return null;
+  const url = `https://restapi.amap.com/v3/geocode/regeo?key=${encodeURIComponent(AMAP_WEB_KEY)}&location=${lon},${lat}&extensions=base`;
+  const data = await fetchJsonWithTimeout(url);
+  if (!data || String(data.status) !== '1') return null;
+  const c = data.regeocode?.addressComponent || {};
+  const city = Array.isArray(c.city) ? c.city[0] : c.city || '';
+  const street = c.streetNumber?.street || c.township || '';
+  return {
+    provider: 'amap',
+    reverse: [{
+      region: String(c.province || ''),
+      city: String(city || ''),
+      district: String(c.district || ''),
+      street: String(street || c.township || ''),
+      name: String(data.regeocode?.formatted_address || ''),
+    }],
+  };
+}
+
+async function reverseGeocodeByStrategy(lat, lon) {
+  return (
+    (await reverseByNominatim(lat, lon)) ||
+    (await reverseByBigDataCloud(lat, lon)) ||
+    (await reverseByAmap(lat, lon)) ||
+    { provider: 'none', reverse: [] }
+  );
+}
+
 function toDateTime(value) {
   if (!value) return `${formatDateForMySQL().slice(0, 10)} 00:00:00`;
   const d = String(value).slice(0, 10);
@@ -290,6 +385,15 @@ function toLegacyRoom(row = {}, image) {
   };
 }
 
+function inferBedType(name = '') {
+  const n = String(name || '').toLowerCase();
+  if (/(双床|双人床|twin)/.test(n)) return '双床';
+  if (/(大床|queen|king)/.test(n)) return '大床';
+  if (/(家庭|family)/.test(n)) return '家庭床';
+  if (/(榻榻米|tatami)/.test(n)) return '榻榻米';
+  return '标准床';
+}
+
 function toHotel(base, audit, rel) {
   const rooms = rel.roomsByHotel[base.id] || [];
   const images = rel.hotelImagesByHotel[base.id] || [];
@@ -385,6 +489,20 @@ app.use('/', express.static(path.join(__dirname)));
 
 app.get('/api/health', (_req, res) => {
   res.json({ code: 200, data: { ok: true, ts: formatDateForMySQL() } });
+});
+
+app.get('/api/geocode/reverse', async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lon = Number(req.query.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    return res.status(400).json({ code: 400, msg: 'Invalid lat/lon' });
+  }
+  try {
+    const data = await reverseGeocodeByStrategy(lat, lon);
+    return res.json({ code: 200, data });
+  } catch (_e) {
+    return res.json({ code: 200, data: { provider: 'none', reverse: [] } });
+  }
 });
 
 app.post('/api/auth/register', async (req, res) => {
@@ -524,14 +642,39 @@ async function queryHotels(req) {
   }
 
   if (q.city) {
-    where.push('b.city = ?');
-    params.push(String(q.city));
+    const cityRaw = String(q.city).trim();
+    const cityNorm = normalizeRegionName(cityRaw);
+    where.push(`(
+      b.city = ?
+      OR b.county = ?
+      OR LOWER(REPLACE(REPLACE(REPLACE(b.city,'省',''),'市',''),'县','')) = ?
+      OR LOWER(REPLACE(REPLACE(REPLACE(b.county,'省',''),'市',''),'县','')) = ?
+    )`);
+    params.push(cityRaw, cityRaw, cityNorm, cityNorm);
   }
 
   if (q.keyword) {
-    where.push('(b.name_cn LIKE ? OR b.name_en LIKE ? OR b.address LIKE ? OR b.scenic_spots LIKE ?)');
+    where.push(`(
+      b.name_cn LIKE ?
+      OR b.name_en LIKE ?
+      OR b.address LIKE ?
+      OR b.scenic_spots LIKE ?
+      OR EXISTS (
+        SELECT 1
+        FROM \`Hotel_Label_Rel\` rel
+        JOIN \`Facility_Label\` l ON rel.label_id = l.id
+        WHERE rel.hotel_id = b.id
+          AND (l.label_name LIKE ? OR l.label_code LIKE ?)
+      )
+    )`);
     const kw = `%${String(q.keyword).trim()}%`;
-    params.push(kw, kw, kw, kw);
+    params.push(kw, kw, kw, kw, kw, kw);
+  }
+
+  const scenicSpots = normalizeTextList(q.scenicSpots);
+  if (scenicSpots.length) {
+    where.push(`(${scenicSpots.map(() => 'b.scenic_spots LIKE ?').join(' OR ')})`);
+    scenicSpots.forEach((spot) => params.push(`%${spot}%`));
   }
 
   if (q.starMin !== undefined && q.starMin !== '') {
@@ -541,6 +684,27 @@ async function queryHotels(req) {
   if (q.starMax !== undefined && q.starMax !== '') {
     where.push('b.star_level <= ?');
     params.push(parseIntSafe(q.starMax, 5));
+  }
+  const stars = normalizeTextList(q.stars)
+    .map((x) => parseIntSafe(x, 0))
+    .filter((x) => Number.isFinite(x) && x >= 1 && x <= 5);
+  if (stars.length) {
+    where.push(`b.star_level IN (${stars.map(() => '?').join(',')})`);
+    params.push(...stars);
+  }
+
+  const tags = normalizeTextList(q.tags).map((x) => x.toLowerCase());
+  for (const tag of tags) {
+    // 每个标签都要求命中（AND 关系），支持 label_name / label_code 模糊匹配
+    where.push(`EXISTS (
+      SELECT 1
+      FROM \`Hotel_Label_Rel\` rel
+      JOIN \`Facility_Label\` l ON rel.label_id = l.id
+      WHERE rel.hotel_id = b.id
+        AND (LOWER(l.label_name) LIKE ? OR LOWER(l.label_code) LIKE ?)
+    )`);
+    const t = `%${tag}%`;
+    params.push(t, t);
   }
 
   const [rows] = await pool.query(
@@ -554,14 +718,6 @@ async function queryHotels(req) {
 
   const rel = await getHotelRelations(rows.map((r) => r.id));
   let data = rows.map((r) => toHotel(r, r, rel));
-
-  const tags = normalizeTextList(q.tags).map((x) => x.toLowerCase());
-  if (tags.length) {
-    data = data.filter((item) => {
-      const all = [...item.labels, ...item.labelCodes].map((x) => String(x || '').toLowerCase());
-      return tags.every((t) => all.some((x) => x.includes(t)));
-    });
-  }
 
   if (q.priceMin !== undefined && q.priceMin !== '') {
     const min = parseFloatSafe(q.priceMin, 0);
@@ -1135,13 +1291,11 @@ app.get('/api/mobile/hotels', async (req, res) => {
   try {
     req.query.scope = 'public';
     const result = await queryHotels(req);
+    const hotelIds = result.records.map((item) => item.id);
+    const rel = await getHotelRelations(hotelIds);
     const data = [];
     for (const item of result.records) {
-      const rel = await getHotelRelations([item.id]);
-      const [roomRows] = await pool.query(
-        'SELECT id, name, price, occupancy, breakfast_included, refundable FROM `Room` WHERE hotel_id = ? ORDER BY price ASC',
-        [item.id]
-      );
+      const roomRows = rel.roomsByHotel[item.id] || [];
       data.push({
         id: item.id,
         name: item.name,
@@ -1163,7 +1317,9 @@ app.get('/api/mobile/hotels', async (req, res) => {
           name: x.name,
           price: Number(x.price || 0),
           capacity: Number(x.occupancy || 2),
-          bedType: 'Queen',
+          bedType: inferBedType(x.name),
+          size: x.size ? Number(x.size) : null,
+          status: Number(x.status || 0) === 0 ? 'available' : 'soldout',
           breakfastIncluded: Number(x.breakfast_included || 0) === 1,
           refundable: Number(x.refundable || 1) === 1,
           image: rel.roomImageByRoom[x.id] || `https://picsum.photos/seed/room_${x.id}/800/500`,
@@ -1197,7 +1353,9 @@ app.get('/api/mobile/hotels/:id', async (req, res) => {
         name: x.name,
         price: Number(x.price || 0),
         capacity: Number(x.occupancy || 2),
-        bedType: 'Queen',
+        bedType: inferBedType(x.name),
+        size: x.size ? Number(x.size) : null,
+        status: Number(x.status || 0) === 0 ? 'available' : 'soldout',
         breakfastIncluded: Number(x.breakfast_included || 0) === 1,
         refundable: Number(x.refundable || 1) === 1,
         image: rel.roomImageByRoom[x.id] || `https://picsum.photos/seed/room_${x.id}/800/500`,

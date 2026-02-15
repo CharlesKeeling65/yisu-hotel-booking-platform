@@ -1,3 +1,7 @@
+/**
+ * Tab 按钮包装器：
+ * 在 iOS 上增加轻量触感反馈，提升底部导航的“按下感”。
+ */
 import { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { PlatformPressable } from '@react-navigation/elements';
 import * as Haptics from 'expo-haptics';

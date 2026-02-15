@@ -4,6 +4,8 @@ export type Room = {
   price: number;
   capacity: number;
   bedType: string;
+  size?: number | null;
+  status?: "available" | "soldout";
   breakfastIncluded: boolean;
   refundable: boolean;
   image?: string;

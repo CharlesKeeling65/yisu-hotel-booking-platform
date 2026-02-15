@@ -48,3 +48,4 @@ app-example
 apps/api/.env
 .next/
 .codex
+dev-previews/

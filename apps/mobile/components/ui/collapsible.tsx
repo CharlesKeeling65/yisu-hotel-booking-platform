@@ -1,3 +1,7 @@
+/**
+ * 折叠面板组件：
+ * 通过本地 isOpen 控制 children 显隐，并用箭头旋转表达状态变化。
+ */
 import { PropsWithChildren, useState } from 'react';
 import { StyleSheet, TouchableOpacity } from 'react-native';
 
