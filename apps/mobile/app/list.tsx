@@ -19,6 +19,7 @@ import CompactSearchPanel from "@/components/hotel/CompactSearchPanel";
 import PriceStarPickerSheet, { PriceStarDraft } from "@/components/hotel/PriceStarPickerSheet";
 import type { Hotel } from "@yisu/shared";
 import { fetchMobileHotels } from "@/lib/api";
+import { parseReverseGeocode, reverseGeocodeWithProvider, stripCityCountySuffix } from "@/lib/location-utils";
 import { getDefaultSearchSession, getSearchSession, setSearchSession } from "@/lib/search-session";
 
 const SORT_OPTIONS = [
@@ -65,7 +66,7 @@ export default function ListScreen() {
   }>();
   const firstTag = typeof params.tags === "string" ? params.tags.split(",").map((x) => x.trim()).filter(Boolean)[0] : "";
 
-  const [city, setCity] = useState(params.city || session.city || "上海市");
+  const [city, setCity] = useState(stripCityCountySuffix(params.city || session.city || "上海市"));
   const [location, setLocation] = useState(params.location || params.keyword || firstTag || session.location || "");
   const [checkInDate, setCheckInDate] = useState(params.checkIn || session.checkIn || defaultSession.checkIn);
   const [checkOutDate, setCheckOutDate] = useState(params.checkOut || session.checkOut || defaultSession.checkOut);
@@ -113,7 +114,7 @@ export default function ListScreen() {
   const priceCount = (priceDraft.min !== 0 || priceDraft.max !== 800 ? 1 : 0) + (priceDraft.stars.length ? 1 : 0);
 
   useEffect(() => {
-    if (typeof params.city === "string") setCity(params.city);
+    if (typeof params.city === "string") setCity(stripCityCountySuffix(params.city));
     if (typeof params.location === "string") setLocation(params.location);
     if (!params.location && typeof params.keyword === "string") setLocation(params.keyword);
     if (!params.location && !params.keyword && firstTag) setLocation(firstTag);
@@ -147,14 +148,13 @@ export default function ListScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
       const pos = await Location.getCurrentPositionAsync({});
-      const info = await Location.reverseGeocodeAsync({
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-      });
-      const cityName = info[0]?.city ?? city;
-      const address = [info[0]?.district, info[0]?.street, info[0]?.name].filter(Boolean).join("");
-      setCity(cityName);
-      setLocation(address || "当前位置");
+      const via = await reverseGeocodeWithProvider(pos.coords.latitude, pos.coords.longitude);
+      const info = via.reverse;
+      const parsed = parseReverseGeocode(info[0]);
+      if (__DEV__) console.log("[list-locate:raw]", { provider: via.provider, coords: pos.coords, reverse: info });
+      if (__DEV__) console.log("[list-locate:parsed]", parsed);
+      setCity(parsed.cityOrCounty || city);
+      setLocation(parsed.detailText || parsed.cityOrCounty || "当前位置");
     } finally {
       setLocating(false);
     }
@@ -245,7 +245,7 @@ export default function ListScreen() {
                   router.replace("/");
                 }}
                 onCityPress={() =>
-                  router.push({
+                  router.replace({
                     pathname: "/location",
                     params: {
                       city,
@@ -263,7 +263,7 @@ export default function ListScreen() {
                   })
                 }
                 onLocationPress={() =>
-                  router.push({
+                  router.replace({
                     pathname: "/location",
                     params: {
                       city,

@@ -24,6 +24,7 @@ import PriceStarPickerSheet, { PriceStarDraft } from '@/components/hotel/PriceSt
 import SearchPanel from '@/components/hotel/SearchPanel'
 import MeasuredPagingCarousel from '@/components/ui/measured-paging-carousel'
 import { fetchMobileHomeBanners } from '@/lib/api'
+import { parseReverseGeocode, reverseGeocodeWithProvider, stripCityCountySuffix } from '@/lib/location-utils'
 import { getDefaultSearchSession, getSearchSession, setSearchSession } from '@/lib/search-session'
 
 const QUICK_TAGS = ['亲子友好', '豪华酒店', '免费停车', '近地铁', '含早餐', '江景海景']
@@ -71,7 +72,7 @@ export default function HomeScreen() {
 
   const { location: locationParam, city: cityParam } = useLocalSearchParams<{ location?: string; city?: string }>()
 
-  const [city, setCity] = useState(initSession.city || '上海市')
+  const [city, setCity] = useState(stripCityCountySuffix(initSession.city || '上海市'))
   const [location, setLocation] = useState(initSession.location || '')
   const [checkInDate, setCheckInDate] = useState(initSession.checkIn || defaultSession.checkIn)
   const [checkOutDate, setCheckOutDate] = useState(initSession.checkOut || defaultSession.checkOut)
@@ -103,13 +104,13 @@ export default function HomeScreen() {
   }, [locationParam])
 
   useEffect(() => {
-    if (typeof cityParam === 'string') setCity(cityParam)
+    if (typeof cityParam === 'string') setCity(stripCityCountySuffix(cityParam))
   }, [cityParam])
 
   useFocusEffect(
     useCallback(() => {
       const current = getSearchSession()
-      setCity(current.city || '上海市')
+      setCity(stripCityCountySuffix(current.city || '上海市'))
       setLocation(current.location || '')
       setCheckInDate(current.checkIn || defaultSession.checkIn)
       setCheckOutDate(current.checkOut || defaultSession.checkOut)
@@ -133,11 +134,13 @@ export default function HomeScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') return
       const pos = await Location.getCurrentPositionAsync({})
-      const info = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude })
-      const cityName = info[0]?.city ?? '上海市'
-      const address = [info[0]?.district, info[0]?.street, info[0]?.name].filter(Boolean).join('')
-      setCity(cityName)
-      setLocation(address || '当前位置')
+      const via = await reverseGeocodeWithProvider(pos.coords.latitude, pos.coords.longitude)
+      const info = via.reverse
+      const parsed = parseReverseGeocode(info[0])
+      if (__DEV__) console.log('[home-locate:raw]', { provider: via.provider, coords: pos.coords, reverse: info })
+      if (__DEV__) console.log('[home-locate:parsed]', parsed)
+      setCity(parsed.cityOrCounty || '上海')
+      setLocation(parsed.detailText || parsed.cityOrCounty || '当前位置')
     } finally {
       setLocating(false)
     }

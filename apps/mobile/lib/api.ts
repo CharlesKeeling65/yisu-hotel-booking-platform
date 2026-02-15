@@ -10,6 +10,19 @@ type ApiResponse<T> = {
   hasMore?: boolean;
 };
 
+export type ReverseGeocodePayload = {
+  provider: string;
+  reverse: Array<{
+    region?: string;
+    city?: string;
+    district?: string;
+    street?: string;
+    name?: string;
+    subregion?: string;
+    streetNumber?: string;
+  }>;
+};
+
 export type ListParams = {
   page?: number;
   pageSize?: number;
@@ -98,4 +111,12 @@ export async function loginMobile(username: string, password: string) {
     }
   );
   return res.data ?? null;
+}
+
+export async function fetchReverseGeocode(lat: number, lon: number) {
+  const search = new URLSearchParams();
+  search.set("lat", String(lat));
+  search.set("lon", String(lon));
+  const res = await getJson<ReverseGeocodePayload>(`/api/geocode/reverse?${search.toString()}`);
+  return res.data ?? { provider: "none", reverse: [] };
 }
