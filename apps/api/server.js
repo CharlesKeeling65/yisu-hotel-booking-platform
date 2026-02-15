@@ -42,6 +42,101 @@ function normalizeTextList(value) {
   return [];
 }
 
+function normalizeRegionName(value) {
+  return String(value || '')
+    .trim()
+    .replace(/(省|市|县)$/g, '')
+    .toLowerCase();
+}
+
+const GEO_TIMEOUT_MS = Math.max(1200, Number(process.env.GEO_TIMEOUT_MS || 4500));
+const AMAP_WEB_KEY = String(process.env.AMAP_WEB_KEY || '');
+
+async function fetchJsonWithTimeout(url, init = {}, timeoutMs = GEO_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_e) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function reverseByNominatim(lat, lon) {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=zh-CN&lat=${lat}&lon=${lon}`;
+  const data = await fetchJsonWithTimeout(url, { headers: { Accept: 'application/json' } });
+  if (!data || typeof data !== 'object') return null;
+  const a = data.address || {};
+  // city: 优先县级市/城市名；不要优先使用地级市 region，避免前端回退时显示成“临汾”。
+  const city = a.city || a.town || a.county || a.region || '';
+  const district = a.county || a.city_district || a.suburb || a.city || '';
+  const street = a.road || '';
+  return {
+    provider: 'nominatim',
+    reverse: [{
+      city: city || '',
+      district: district || '',
+      region: a.state || '',
+      street: street || '',
+      name: data.name || '',
+    }],
+  };
+}
+
+async function reverseByBigDataCloud(lat, lon) {
+  const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=zh`;
+  const data = await fetchJsonWithTimeout(url);
+  if (!data || typeof data !== 'object') return null;
+  const admins = data.localityInfo?.administrative || [];
+  const prefecture = admins.find((x) => Number(x.adminLevel) === 5)?.name || '';
+  const countyLevel = admins.find((x) => Number(x.adminLevel) === 6)?.name || '';
+  const district = String(data.locality || countyLevel || '');
+  const city = String(data.city || prefecture || '');
+  return {
+    provider: 'bigdatacloud',
+    reverse: [{
+      region: String(data.principalSubdivision || ''),
+      city,
+      district: String(district || ''),
+      street: '',
+      name: '',
+    }],
+  };
+}
+
+async function reverseByAmap(lat, lon) {
+  if (!AMAP_WEB_KEY) return null;
+  const url = `https://restapi.amap.com/v3/geocode/regeo?key=${encodeURIComponent(AMAP_WEB_KEY)}&location=${lon},${lat}&extensions=base`;
+  const data = await fetchJsonWithTimeout(url);
+  if (!data || String(data.status) !== '1') return null;
+  const c = data.regeocode?.addressComponent || {};
+  const city = Array.isArray(c.city) ? c.city[0] : c.city || '';
+  const street = c.streetNumber?.street || c.township || '';
+  return {
+    provider: 'amap',
+    reverse: [{
+      region: String(c.province || ''),
+      city: String(city || ''),
+      district: String(c.district || ''),
+      street: String(street || c.township || ''),
+      name: String(data.regeocode?.formatted_address || ''),
+    }],
+  };
+}
+
+async function reverseGeocodeByStrategy(lat, lon) {
+  return (
+    (await reverseByNominatim(lat, lon)) ||
+    (await reverseByBigDataCloud(lat, lon)) ||
+    (await reverseByAmap(lat, lon)) ||
+    { provider: 'none', reverse: [] }
+  );
+}
+
 function toDateTime(value) {
   if (!value) return `${formatDateForMySQL().slice(0, 10)} 00:00:00`;
   const d = String(value).slice(0, 10);
@@ -396,6 +491,20 @@ app.get('/api/health', (_req, res) => {
   res.json({ code: 200, data: { ok: true, ts: formatDateForMySQL() } });
 });
 
+app.get('/api/geocode/reverse', async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lon = Number(req.query.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    return res.status(400).json({ code: 400, msg: 'Invalid lat/lon' });
+  }
+  try {
+    const data = await reverseGeocodeByStrategy(lat, lon);
+    return res.json({ code: 200, data });
+  } catch (_e) {
+    return res.json({ code: 200, data: { provider: 'none', reverse: [] } });
+  }
+});
+
 app.post('/api/auth/register', async (req, res) => {
   const p = req.body || {};
   const role = ['admin', 'merchant', 'user'].includes(p.role) ? p.role : 'user';
@@ -533,8 +642,15 @@ async function queryHotels(req) {
   }
 
   if (q.city) {
-    where.push('b.city = ?');
-    params.push(String(q.city));
+    const cityRaw = String(q.city).trim();
+    const cityNorm = normalizeRegionName(cityRaw);
+    where.push(`(
+      b.city = ?
+      OR b.county = ?
+      OR LOWER(REPLACE(REPLACE(REPLACE(b.city,'省',''),'市',''),'县','')) = ?
+      OR LOWER(REPLACE(REPLACE(REPLACE(b.county,'省',''),'市',''),'县','')) = ?
+    )`);
+    params.push(cityRaw, cityRaw, cityNorm, cityNorm);
   }
 
   if (q.keyword) {
