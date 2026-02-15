@@ -2,12 +2,22 @@ SET NAMES utf8mb4;
 SET CHARACTER SET utf8mb4;
 USE `yisu_db`;
 
+-- 插入商家用户，确保 Hotel_Base 的 merchantId 引用存在（避免外键失败）
+INSERT IGNORE INTO `User` (`id`,`account`,`email`,`phone`,`name`,`real_name`,`company_name`,`role`,`password`) VALUES
+('merchant_001','m.shanghai','merchant.shanghai@yisu.com',NULL,'上海商家','张宁','沪上旅宿集团','merchant','Merchant#2026!SH'),
+('merchant_002','m.beijing','merchant.beijing@yisu.com',NULL,'北京商家','陈璐','京华酒店管理','merchant','Merchant#2026!BJ'),
+('merchant_003','m.shenzhen','merchant.shenzhen@yisu.com',NULL,'深圳商家','黄涛','深湾旅业有限公司','merchant','Merchant#2026!SZ'),
+('merchant_004','m.hangzhou','merchant.hangzhou@yisu.com',NULL,'杭州商家','杨帆','杭城智选酒店','merchant','Merchant#2026!HZ'),
+('merchant_005','m.chengdu','merchant.chengdu@yisu.com',NULL,'成都商家','何然','蓉城酒店运营中心','merchant','Merchant#2026!CD');
+
+-- 删除原先的测试数据
 DELETE FROM `Image_Storage` WHERE id LIKE 'img_seed_%';
 DELETE FROM `Hotel_Label_Rel` WHERE id LIKE 'rel_seed_%';
 DELETE FROM `Room` WHERE id LIKE 'room_seed_%';
 DELETE FROM `Hotel_Audit` WHERE id LIKE 'audit_seed_%';
 DELETE FROM `Hotel_Base` WHERE id LIKE 'hotel_seed_%';
 
+-- 插入酒店基本信息数据
 INSERT IGNORE INTO `Hotel_Base` (`id`,`merchantId`,`name_cn`,`name_en`,`province`,`city`,`county`,`address`,`star_level`,`intro`,`scenic_spots`,`latitude`,`longitude`,`featured_weight`,`start_date`,`created_time`) VALUES
 ('hotel_seed_001','merchant_001','上海澜酒店1','Harbor Grand Hotel 1','上海市','上海市','浦东新区','浦东新区解放路101号',4,'商务出差推荐，会议与办公配套完善。（样例数据#1）','外滩,东方明珠,迪士尼度假区',30.170000,120.190000,90,'2013-02-01 00:00:00','2025-02-02 10:03:00'),
 ('hotel_seed_002','merchant_002','上海庭酒店2','Metro Vista Inn 2','上海市','上海市','黄浦区','黄浦区中山路102号',5,'高端轻奢体验，适合情侣与家庭入住。（样例数据#2）','人民广场,南京路步行街,豫园',30.340000,120.380000,80,'2014-03-01 00:00:00','2025-03-03 10:06:00'),
@@ -32,6 +42,8 @@ INSERT IGNORE INTO `Hotel_Base` (`id`,`merchantId`,`name_cn`,`name_en`,`province
 ('hotel_seed_021','merchant_001','厦门颂酒店21','Island Breeze Resort 21','福建省','厦门市','思明区','思明区解放路121号',3,'亲子度假优选，设施齐全，交通便利。（样例数据#21）','鼓浪屿,中山路,环岛路',33.570000,123.990000,8,'2021-10-01 00:00:00','2025-04-22 10:03:00'),
 ('hotel_seed_022','merchant_002','三亚栖酒店22','Seaside Luxury Hotel 22','海南省','三亚市','吉阳区','吉阳区中山路122号',4,'商务出差推荐，会议与办公配套完善。（样例数据#22）','亚龙湾,大东海,海棠湾',33.740000,124.180000,16,'2022-11-01 00:00:00','2025-05-23 10:06:00');
 
+
+-- 插入房间数据
 INSERT IGNORE INTO `Hotel_Audit` (`id`,`hotel_id`,`audit_status`,`online_status`,`status`,`audit_reason`,`auditor_id`,`audit_time`,`online_time`) VALUES
 ('audit_seed_001','hotel_seed_001',1,1,1,'','admin_001','2025-12-01 15:00:00','2025-12-01 18:00:00'),
 ('audit_seed_002','hotel_seed_002',1,1,1,'','admin_002','2025-12-02 15:00:00','2025-12-02 18:00:00'),
@@ -56,6 +68,7 @@ INSERT IGNORE INTO `Hotel_Audit` (`id`,`hotel_id`,`audit_status`,`online_status`
 ('audit_seed_021','hotel_seed_021',1,0,2,'通过审核，当前由商家主动下线。','admin_001','2025-10-21 10:00:00',NULL),
 ('audit_seed_022','hotel_seed_022',1,0,2,'通过审核，当前由商家主动下线。','admin_002','2025-10-22 10:00:00',NULL);
 
+-- 插入标签关系数据
 INSERT IGNORE INTO `Hotel_Label_Rel` (`id`,`hotel_id`,`label_id`) VALUES
 ('rel_seed_001','hotel_seed_001',1),
 ('rel_seed_002','hotel_seed_001',4),
@@ -124,6 +137,8 @@ INSERT IGNORE INTO `Hotel_Label_Rel` (`id`,`hotel_id`,`label_id`) VALUES
 ('rel_seed_065','hotel_seed_022',5),
 ('rel_seed_066','hotel_seed_022',8);
 
+
+-- 插入图片数据
 INSERT IGNORE INTO `Image_Storage` (`id`,`related_type`,`related_id`,`image_url`,`sort`) VALUES
 ('img_seed_h_001_1','hotel','hotel_seed_001','https://picsum.photos/seed/yisu_1/1280/720',0),
 ('img_seed_h_001_2','hotel','hotel_seed_001','https://picsum.photos/seed/yisu_2/1280/720',1),
@@ -236,6 +251,8 @@ INSERT IGNORE INTO `Image_Storage` (`id`,`related_type`,`related_id`,`image_url`
 ('img_seed_r_022_1','room','room_seed_022_1','https://picsum.photos/seed/yisu_109/1280/720',0),
 ('img_seed_r_022_2','room','room_seed_022_2','https://picsum.photos/seed/yisu_110/1280/720',0);
 
+
+-- 插入房间数据
 INSERT IGNORE INTO `Room` (`id`,`hotel_id`,`name`,`price`,`occupancy`,`size`,`breakfast_included`,`refundable`,`status`) VALUES
 ('room_seed_001_1','hotel_seed_001','高级大床房',280,2,26,1,1,0),
 ('room_seed_001_2','hotel_seed_001','行政双床房',400,3,38,0,0,0),
