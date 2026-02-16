@@ -13,9 +13,12 @@
   },
   "workspaces": [
     "apps/*",
-  "packages/*"
+    "packages/*"
   ],
   "devDependencies": {
     "concurrently": "^7.6.0"
+  },
+  "dependencies": {
+    "lucide-react": "^0.564.0"
   }
 }
