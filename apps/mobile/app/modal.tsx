@@ -1,3 +1,7 @@
+/**
+ * 示例模态页：
+ * 演示 expo-router modal 路由的基本写法。
+ */
 import { Link } from 'expo-router';
 import { StyleSheet } from 'react-native';
 

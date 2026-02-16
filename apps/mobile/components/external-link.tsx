@@ -1,3 +1,7 @@
+/**
+ * 外链组件：
+ * Web 走浏览器新标签，Native 走应用内浏览器（expo-web-browser）。
+ */
 import { Href, Link } from 'expo-router';
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import { type ComponentProps } from 'react';

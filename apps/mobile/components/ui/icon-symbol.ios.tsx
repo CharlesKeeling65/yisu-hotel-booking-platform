@@ -1,3 +1,7 @@
+/**
+ * iOS 图标组件：
+ * 直接使用 Expo SymbolView 渲染 SF Symbols，保持原生视觉。
+ */
 import { SymbolView, SymbolViewProps, SymbolWeight } from 'expo-symbols';
 import { StyleProp, ViewStyle } from 'react-native';
 

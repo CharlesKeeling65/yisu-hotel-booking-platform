@@ -1,3 +1,7 @@
+/**
+ * 通用视差滚动容器：
+ * 根据滚动偏移插值计算 header 的位移与缩放，实现“下拉放大/上推跟随”。
+ */
 import type { PropsWithChildren, ReactElement } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, {

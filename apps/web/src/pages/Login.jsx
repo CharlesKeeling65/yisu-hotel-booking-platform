@@ -9,9 +9,11 @@ import bg2 from '../assets/images/bg2.jpg';
 import bg3 from '../assets/images/bg3.jpg';
 
 async function sha256Hex(text) {
-  const data = new TextEncoder().encode(text)
-  const digest = await crypto.subtle.digest('SHA-256', data)
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+  const data = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 export default function Login() {
@@ -25,30 +27,30 @@ export default function Login() {
     e.preventDefault()
     setError('')
     if (!identifier || !password) {
-      setError('请输入账号与密码')
-      return
+      setError("请输入账号与密码");
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
     try {
-      const passwordCipher = await sha256Hex(password)
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const passwordCipher = await sha256Hex(password);
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier, passwordCipher }),
-      })
-      const json = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(json?.msg || '登录失败')
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.msg || "登录失败");
 
-      const user = json?.data?.user
-      if (!user) throw new Error('登录结果异常')
-      localStorage.setItem('authUser', JSON.stringify(user))
-      localStorage.setItem('authToken', json?.data?.token || '')
-      navigate('/dashboard')
+      const user = json?.data?.user;
+      if (!user) throw new Error("登录结果异常");
+      sessionStorage.setItem("authUser", JSON.stringify(user));
+      sessionStorage.setItem("authToken", json?.data?.token || "");
+      navigate("/dashboard");
     } catch (err) {
-      setError(err?.message || '登录失败')
+      setError(err?.message || "登录失败");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -133,5 +135,5 @@ export default function Login() {
         </div>
       </div>
     </div>
-  )
+  );
 }
