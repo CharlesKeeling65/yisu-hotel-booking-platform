@@ -1,3 +1,7 @@
+/**
+ * 示例动画组件：
+ * 使用 reanimated 的样式动画定义，渲染一个挥手 emoji。
+ */
 import Animated from 'react-native-reanimated';
 
 export function HelloWave() {

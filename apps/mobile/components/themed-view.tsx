@@ -1,3 +1,7 @@
+/**
+ * 主题容器组件：
+ * 自动读取当前主题背景色，统一页面容器底色处理。
+ */
 import { View, type ViewProps } from 'react-native';
 
 import { useThemeColor } from '@/hooks/use-theme-color';

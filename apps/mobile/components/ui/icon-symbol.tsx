@@ -1,4 +1,7 @@
-// Fallback for using MaterialIcons on Android and web.
+/**
+ * Android/Web 图标适配层：
+ * 将 iOS SF Symbol 名称映射为 MaterialIcons 名称，保证跨平台图标调用一致。
+ */
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
