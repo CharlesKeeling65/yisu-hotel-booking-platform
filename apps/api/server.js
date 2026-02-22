@@ -623,6 +623,13 @@ function derivePriceRange(rooms) {
 }
 
 function toLegacyRoom(row = {}, image) {
+  const remainVal = row.remain != null ? Number(row.remain) : null;
+  // 状态优先由 remain 判断：有剩余(>0)为可订，否则为售罄；
+  // 若 remain 缺失则退回到数据库的 status 字段作为回退（但不再虚构一个默认可订的 remain=10）
+  const status =
+    remainVal != null ? (remainVal > 0 ? "available" : "soldout") : (row.status === 0 ? "available" : "soldout");
+  const remain = remainVal != null ? remainVal : 0;
+
   return {
     id: row.id,
     hotel_id: row.hotel_id,
@@ -632,8 +639,8 @@ function toLegacyRoom(row = {}, image) {
     ),
     current: Number(row.price || 0),
     discount: row.discount || "",
-    remain: Number(row.remain != null ? row.remain : row.status === 0 ? 10 : 0),
-    status: row.status === 0 ? "available" : "soldout",
+    remain,
+    status,
     remark: row.remark || "",
     image: image || "",
     occupancy: Number(row.occupancy || 2),
@@ -2036,8 +2043,11 @@ app.get("/api/mobile/hotels", async (req, res) => {
           capacity: Number(x.occupancy || 2),
           bedType: inferBedType(x.name),
           size: x.size ? Number(x.size) : null,
-          remain: Number(x.remain != null ? x.remain : x.status === 0 ? 10 : 0),
-          status: Number(x.status || 0) === 0 ? "available" : "soldout",
+          // 不再默认把缺失的 remain 当作可订库存 (如之前用 status===0 -> 10)，
+          // 优先根据数据库字段 remain 判断可售状态，缺失时退回到 status 字段。
+          remain: Number(x.remain != null ? x.remain : 0),
+          status:
+            x.remain != null ? (Number(x.remain) > 0 ? "available" : "soldout") : (Number(x.status || 0) === 0 ? "available" : "soldout"),
           breakfastIncluded: Number(x.breakfast_included || 0) === 1,
           raw: x,
           image:

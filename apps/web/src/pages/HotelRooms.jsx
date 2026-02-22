@@ -165,7 +165,9 @@ export default function HotelRooms() {
     if (loadedRef.current) return;
     loadedRef.current = true;
     const draft = loadDraft();
-    if (draft.length) {
+    // 仅在新酒店草稿（hotelId === "0"）场景下自动加载本地草稿，
+    // 避免未保存的本地草稿覆盖数据库中的已保存数据。
+    if (draft.length && String(hotelId) === "0") {
       setRows(draft);
       highlightIfNeeded(draft);
       return;
