@@ -1,9 +1,18 @@
+import { fetchMobileOrders, payMobileOrder, type MobileOrder } from "@/lib/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, View, Alert, Modal } from "react-native";
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    Modal,
+    Pressable,
+    ScrollView,
+    Text,
+    View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { fetchMobileOrders, payMobileOrder, type MobileOrder } from "@/lib/api";
 
 export default function OrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -34,7 +43,11 @@ export default function OrderDetail() {
     setLoading(true);
     (async () => {
       try {
-        const { list } = await fetchMobileOrders({ customerId, page: 1, pageSize: 200 });
+        const { list } = await fetchMobileOrders({
+          customerId,
+          page: 1,
+          pageSize: 200,
+        });
         if (!mounted) return;
         const found = list.find((o) => o.id === id) || null;
         setOrder(found);
@@ -58,7 +71,11 @@ export default function OrderDetail() {
     try {
       await payMobileOrder(order.id, customerId);
       // refresh by re-fetching
-      const { list } = await fetchMobileOrders({ customerId, page: 1, pageSize: 200 });
+      const { list } = await fetchMobileOrders({
+        customerId,
+        page: 1,
+        pageSize: 200,
+      });
       const found = list.find((o) => o.id === id) || null;
       setOrder(found);
       setPayVisible(false);
@@ -81,10 +98,22 @@ export default function OrderDetail() {
 
   if (!order) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
         <Text style={{ fontSize: 18, fontWeight: "600" }}>订单不存在</Text>
-        <Text style={{ marginTop: 8, color: "#6B7280" }}>无法找到该订单或不属于当前用户。</Text>
-        <Pressable style={{ marginTop: 16 }} onPress={() => router.replace("/(tabs)/cart") }>
+        <Text style={{ marginTop: 8, color: "#6B7280" }}>
+          无法找到该订单或不属于当前用户。
+        </Text>
+        <Pressable
+          style={{ marginTop: 16 }}
+          onPress={() => router.replace("/(tabs)/cart")}
+        >
           <Text style={{ color: "#1890FF" }}>返回订单页</Text>
         </Pressable>
       </View>
@@ -93,13 +122,29 @@ export default function OrderDetail() {
 
   return (
     <ScrollView contentContainerStyle={{ padding: 0, paddingTop: insets.top }}>
-      <View style={{ padding: 16, backgroundColor: "#fff", alignItems: "center" }}>
+      <View
+        style={{ padding: 16, backgroundColor: "#fff", alignItems: "center" }}
+      >
         <Text style={{ color: "#111827", fontSize: 14 }}>订单号{order.id}</Text>
-        <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "700", color: "#111827" }}>{order.statusLabel}</Text>
+        <Text
+          style={{
+            marginTop: 12,
+            fontSize: 28,
+            fontWeight: "700",
+            color: "#111827",
+          }}
+        >
+          {order.statusLabel}
+        </Text>
       </View>
 
       <View style={{ padding: 16, backgroundColor: "#fff", marginTop: 8 }}>
-        <Text style={{ color: "#6B7280" }}>在线付 <Text style={{ color: "#1890FF", fontWeight: "700" }}>¥{order.payableAmount.toFixed(2)}</Text></Text>
+        <Text style={{ color: "#6B7280" }}>
+          在线付{" "}
+          <Text style={{ color: "#1890FF", fontWeight: "700" }}>
+            ¥{order.payableAmount.toFixed(2)}
+          </Text>
+        </Text>
         <View style={{ marginTop: 8, flexDirection: "row" }}>
           <Pressable onPress={() => {}} style={{ marginRight: 16 }}>
             <Text style={{ color: "#1890FF" }}>费用明细</Text>
@@ -111,31 +156,84 @@ export default function OrderDetail() {
       </View>
 
       <View style={{ backgroundColor: "#fff", marginTop: 8, padding: 16 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, fontWeight: "600" }}>{order.hotelName}</Text>
+            <Text style={{ fontSize: 16, fontWeight: "600" }}>
+              {order.hotelName}
+            </Text>
             <Text style={{ marginTop: 6, color: "#6B7280" }}>酒店详情</Text>
           </View>
-          <Image source={{ uri: order.hotelName ? `https://picsum.photos/seed/hotel_${order.id}/120/80` : '' }} style={{ width: 80, height: 60, borderRadius: 8 }} />
+          <Image
+            source={{
+              uri: order.hotelName
+                ? `https://picsum.photos/seed/hotel_${order.id}/120/80`
+                : "",
+            }}
+            style={{ width: 80, height: 60, borderRadius: 8 }}
+          />
         </View>
 
-        <View style={{ flexDirection: "row", marginTop: 12, justifyContent: "space-between" }}>
-          <Pressable style={{ flex: 1, marginRight: 8, paddingVertical: 10, borderRadius: 8, backgroundColor: "#F3F4F6", alignItems: "center" }}>
+        <View
+          style={{
+            flexDirection: "row",
+            marginTop: 12,
+            justifyContent: "space-between",
+          }}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              marginRight: 8,
+              paddingVertical: 10,
+              borderRadius: 8,
+              backgroundColor: "#F3F4F6",
+              alignItems: "center",
+            }}
+          >
             <Text>发消息给酒店</Text>
           </Pressable>
-          <Pressable style={{ flex: 1, marginLeft: 8, paddingVertical: 10, borderRadius: 8, backgroundColor: "#F3F4F6", alignItems: "center" }}>
+          <Pressable
+            style={{
+              flex: 1,
+              marginLeft: 8,
+              paddingVertical: 10,
+              borderRadius: 8,
+              backgroundColor: "#F3F4F6",
+              alignItems: "center",
+            }}
+          >
             <Text>致电酒店</Text>
           </Pressable>
         </View>
 
-        <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: "#F3F4F6", paddingTop: 12 }}>
-          <Text style={{ fontSize: 14 }}>📅  {order.checkIn} 至 {order.checkOut}  |  {order.nights} 晚</Text>
-          <Text style={{ marginTop: 6, color: "#6B7280" }}>入住：14:00后   离店：14:00前</Text>
+        <View
+          style={{
+            marginTop: 16,
+            borderTopWidth: 1,
+            borderTopColor: "#F3F4F6",
+            paddingTop: 12,
+          }}
+        >
+          <Text style={{ fontSize: 14 }}>
+            📅 {order.checkIn} 至 {order.checkOut} | {order.nights} 晚
+          </Text>
+          <Text style={{ marginTop: 6, color: "#6B7280" }}>
+            入住：14:00后 离店：14:00前
+          </Text>
         </View>
 
         <View style={{ marginTop: 12 }}>
           <Text style={{ fontSize: 14, fontWeight: "600" }}>酒店位置</Text>
-          <Text style={{ marginTop: 6, color: "#6B7280" }}>{order.hotelCity}{order.hotelAddress ? ` ${order.hotelAddress}` : ''}</Text>
+          <Text style={{ marginTop: 6, color: "#6B7280" }}>
+            {order.hotelCity}
+            {order.hotelAddress ? ` ${order.hotelAddress}` : ""}
+          </Text>
           <Pressable style={{ marginTop: 8 }}>
             <Text style={{ color: "#1890FF" }}>地图/导航</Text>
           </Pressable>
@@ -143,37 +241,129 @@ export default function OrderDetail() {
       </View>
 
       <View style={{ backgroundColor: "#fff", marginTop: 8, padding: 16 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, fontWeight: "600" }}>{order.roomName}  {order.roomsCount}间{order.nights}晚</Text>
+            <Text style={{ fontSize: 16, fontWeight: "600" }}>
+              {order.roomName} {order.roomsCount}间{order.nights}晚
+            </Text>
             <Pressable>
-              <Text style={{ color: "#1890FF", marginTop: 6 }}>客房设施及加床</Text>
+              <Text style={{ color: "#1890FF", marginTop: 6 }}>
+                客房设施及加床
+              </Text>
             </Pressable>
           </View>
-          <Image source={{ uri: `https://picsum.photos/seed/room_${order.id}/88/64` }} style={{ width: 88, height: 64, borderRadius: 8 }} />
+          <Image
+            source={{
+              uri: `https://picsum.photos/seed/room_${order.id}/88/64`,
+            }}
+            style={{ width: 88, height: 64, borderRadius: 8 }}
+          />
         </View>
 
-        <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: "#F3F4F6", paddingTop: 12 }}>
+        <View
+          style={{
+            marginTop: 12,
+            borderTopWidth: 1,
+            borderTopColor: "#F3F4F6",
+            paddingTop: 12,
+          }}
+        >
           <Text style={{ marginBottom: 8 }}>👤 {order.guestName}</Text>
-          <Text>📞 {String(order.guestPhone || '').replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')}</Text>
+          <Text>
+            📞{" "}
+            {String(order.guestPhone || "").replace(
+              /(\d{3})\d{4}(\d{4})/,
+              "$1****$2",
+            )}
+          </Text>
         </View>
       </View>
 
       <View style={{ height: 60 }} />
 
-      <Modal visible={payVisible} transparent animationType="slide" onRequestClose={() => setPayVisible(false)}>
-        <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.4)" }}>
-          <View style={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, backgroundColor: "#fff", padding: 20 }}>
-            <Text style={{ textAlign: "center", fontSize: 16, fontWeight: "600" }}>微信支付</Text>
-            <Text style={{ marginTop: 8, textAlign: "center", color: "#6B7280", fontSize: 12 }}>模拟微信支付（不会真实扣款）</Text>
-            <Text style={{ marginTop: 16, textAlign: "center", fontSize: 28, color: "#10B981", fontWeight: "700" }}>¥{order.payableAmount.toFixed(2)}</Text>
+      <Modal
+        visible={payVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPayVisible(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "flex-end",
+            backgroundColor: "rgba(0,0,0,0.4)",
+          }}
+        >
+          <View
+            style={{
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              backgroundColor: "#fff",
+              padding: 20,
+            }}
+          >
+            <Text
+              style={{ textAlign: "center", fontSize: 16, fontWeight: "600" }}
+            >
+              微信支付
+            </Text>
+            <Text
+              style={{
+                marginTop: 8,
+                textAlign: "center",
+                color: "#6B7280",
+                fontSize: 12,
+              }}
+            >
+              模拟微信支付（不会真实扣款）
+            </Text>
+            <Text
+              style={{
+                marginTop: 16,
+                textAlign: "center",
+                fontSize: 28,
+                color: "#10B981",
+                fontWeight: "700",
+              }}
+            >
+              ¥{order.payableAmount.toFixed(2)}
+            </Text>
 
             <View style={{ flexDirection: "row", marginTop: 20 }}>
-              <Pressable style={{ flex: 1, borderRadius: 999, borderWidth: 1, borderColor: "#E5E7EB", paddingVertical: 12, alignItems: "center", marginRight: 8 }} onPress={() => setPayVisible(false)}>
+              <Pressable
+                style={{
+                  flex: 1,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: "#E5E7EB",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                  marginRight: 8,
+                }}
+                onPress={() => setPayVisible(false)}
+              >
                 <Text style={{ color: "#374151" }}>取消</Text>
               </Pressable>
-              <Pressable style={{ flex: 1, borderRadius: 999, backgroundColor: "#1890FF", paddingVertical: 12, alignItems: "center", marginLeft: 8 }} onPress={handlePay}>
-                <Text style={{ color: "#fff", fontWeight: "600" }}>{processingPay ? "支付中..." : "确认支付"}</Text>
+              <Pressable
+                style={{
+                  flex: 1,
+                  borderRadius: 999,
+                  backgroundColor: "#1890FF",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                  marginLeft: 8,
+                }}
+                onPress={handlePay}
+              >
+                <Text style={{ color: "#fff", fontWeight: "600" }}>
+                  {processingPay ? "支付中..." : "确认支付"}
+                </Text>
               </Pressable>
             </View>
           </View>

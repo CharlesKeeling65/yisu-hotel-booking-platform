@@ -7,7 +7,7 @@
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -32,7 +32,15 @@ const STATUS_TABS: Array<{ key: StatusKey; label: string }> = [
   { key: "completed", label: "待点评" },
 ];
 
-function OrderCard({ order, onPay, onView }: { order: MobileOrder; onPay?: (o: MobileOrder) => void; onView?: (o: MobileOrder) => void }) {
+function OrderCard({
+  order,
+  onPay,
+  onView,
+}: {
+  order: MobileOrder;
+  onPay?: (o: MobileOrder) => void;
+  onView?: (o: MobileOrder) => void;
+}) {
   const dateText =
     order.checkIn && order.checkOut
       ? `${order.checkIn}至${order.checkOut}`
@@ -67,7 +75,14 @@ function OrderCard({ order, onPay, onView }: { order: MobileOrder; onPay?: (o: M
         </Text>
         <Text style={styles.amountText}>{amountText}</Text>
       </View>
-      <View style={{ marginTop: 10, flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
+      <View
+        style={{
+          marginTop: 10,
+          flexDirection: "row",
+          justifyContent: "flex-end",
+          gap: 8,
+        }}
+      >
         <Pressable
           onPress={() => {
             if (onView) onView(order);
@@ -278,7 +293,9 @@ export default function OrdersScreen() {
           <OrderCard
             order={item}
             onPay={(o) => openPayFor(o)}
-            onView={(o) => router.push({ pathname: "/order/[id]", params: { id: o.id } })}
+            onView={(o) =>
+              router.push({ pathname: "/order/[id]", params: { id: o.id } })
+            }
           />
         )}
         contentContainerStyle={styles.listContent}
@@ -331,27 +348,78 @@ export default function OrdersScreen() {
         animationType="slide"
         onRequestClose={() => setPayVisible(false)}
       >
-        <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.4)" }}>
-          <View style={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, backgroundColor: "#fff", padding: 20 }}>
-            <Text style={{ textAlign: "center", fontSize: 16, fontWeight: "600" }}>微信支付</Text>
-            <Text style={{ marginTop: 8, textAlign: "center", color: "#6B7280", fontSize: 12 }}>模拟微信支付（不会真实扣款）</Text>
-            <Text style={{ marginTop: 16, textAlign: "center", fontSize: 28, color: "#10B981", fontWeight: "700" }}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "flex-end",
+            backgroundColor: "rgba(0,0,0,0.4)",
+          }}
+        >
+          <View
+            style={{
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              backgroundColor: "#fff",
+              padding: 20,
+            }}
+          >
+            <Text
+              style={{ textAlign: "center", fontSize: 16, fontWeight: "600" }}
+            >
+              微信支付
+            </Text>
+            <Text
+              style={{
+                marginTop: 8,
+                textAlign: "center",
+                color: "#6B7280",
+                fontSize: 12,
+              }}
+            >
+              模拟微信支付（不会真实扣款）
+            </Text>
+            <Text
+              style={{
+                marginTop: 16,
+                textAlign: "center",
+                fontSize: 28,
+                color: "#10B981",
+                fontWeight: "700",
+              }}
+            >
               ¥{selectedOrder ? selectedOrder.payableAmount.toFixed(2) : "0.00"}
             </Text>
 
             <View style={{ flexDirection: "row", marginTop: 20 }}>
               <Pressable
-                style={{ flex: 1, borderRadius: 999, borderWidth: 1, borderColor: "#E5E7EB", paddingVertical: 12, alignItems: "center", marginRight: 8 }}
+                style={{
+                  flex: 1,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: "#E5E7EB",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                  marginRight: 8,
+                }}
                 onPress={() => setPayVisible(false)}
               >
                 <Text style={{ color: "#374151" }}>取消</Text>
               </Pressable>
               <Pressable
-                style={{ flex: 1, borderRadius: 999, backgroundColor: "#1890FF", paddingVertical: 12, alignItems: "center", marginLeft: 8 }}
+                style={{
+                  flex: 1,
+                  borderRadius: 999,
+                  backgroundColor: "#1890FF",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                  marginLeft: 8,
+                }}
                 onPress={handleConfirmPay}
                 disabled={processingPay}
               >
-                <Text style={{ color: "#fff", fontWeight: "600" }}>{processingPay ? "支付中..." : "确认支付"}</Text>
+                <Text style={{ color: "#fff", fontWeight: "600" }}>
+                  {processingPay ? "支付中..." : "确认支付"}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -370,15 +438,45 @@ export default function OrdersScreen() {
           router.replace("/(tabs)/cart");
         }}
       >
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.4)" }}>
-          <View style={{ width: "90%", borderRadius: 16, backgroundColor: "#fff", padding: 20 }}>
-            <Text style={{ textAlign: "center", fontSize: 16, fontWeight: "600" }}>支付成功</Text>
-            <Text style={{ marginTop: 8, textAlign: "center", color: "#6B7280", fontSize: 12 }}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "rgba(0,0,0,0.4)",
+          }}
+        >
+          <View
+            style={{
+              width: "90%",
+              borderRadius: 16,
+              backgroundColor: "#fff",
+              padding: 20,
+            }}
+          >
+            <Text
+              style={{ textAlign: "center", fontSize: 16, fontWeight: "600" }}
+            >
+              支付成功
+            </Text>
+            <Text
+              style={{
+                marginTop: 8,
+                textAlign: "center",
+                color: "#6B7280",
+                fontSize: 12,
+              }}
+            >
               已成功支付，{successCountdown} 秒后自动跳转订单页
             </Text>
             <View style={{ marginTop: 16 }}>
               <Pressable
-                style={{ borderRadius: 999, backgroundColor: "#1890FF", paddingVertical: 12, alignItems: "center" }}
+                style={{
+                  borderRadius: 999,
+                  backgroundColor: "#1890FF",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                }}
                 onPress={() => {
                   if (successTimerRef.current) {
                     clearInterval(successTimerRef.current);
@@ -388,7 +486,9 @@ export default function OrdersScreen() {
                   router.replace("/(tabs)/cart");
                 }}
               >
-                <Text style={{ color: "#fff", fontWeight: "600" }}>查看订单</Text>
+                <Text style={{ color: "#fff", fontWeight: "600" }}>
+                  查看订单
+                </Text>
               </Pressable>
             </View>
           </View>
