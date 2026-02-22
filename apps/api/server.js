@@ -165,7 +165,9 @@ function normalizeReverseGeocodePayload(payload) {
   const city = String(first.city || first.subregion || "").trim();
   const district = String(first.district || "").trim();
   const districtAsCity = /(县|市)$/.test(district);
-  const cityOrCountyRaw = districtAsCity ? district : city || district || province;
+  const cityOrCountyRaw = districtAsCity
+    ? district
+    : city || district || province;
   const cityOrCounty = stripRegionSuffix(cityOrCountyRaw);
   const rawStreet = String(first.street || "").trim();
   const streetNorm = stripRegionSuffix(rawStreet);
@@ -515,7 +517,10 @@ async function initDbPool() {
       "sql",
       "add_20_hotels_data.sql",
     );
-    await runSqlFileStatements(add20HotelsSeedPath, "seed additional 20 hotels");
+    await runSqlFileStatements(
+      add20HotelsSeedPath,
+      "seed additional 20 hotels",
+    );
   }
 
   // migrate_add_room_fields.sql 注释说明为“向 Room 表添加缺失字段（安全执行，可重复运行）”。
@@ -627,7 +632,13 @@ function toLegacyRoom(row = {}, image) {
   // 状态优先由 remain 判断：有剩余(>0)为可订，否则为售罄；
   // 若 remain 缺失则退回到数据库的 status 字段作为回退（但不再虚构一个默认可订的 remain=10）
   const status =
-    remainVal != null ? (remainVal > 0 ? "available" : "soldout") : (row.status === 0 ? "available" : "soldout");
+    remainVal != null
+      ? remainVal > 0
+        ? "available"
+        : "soldout"
+      : row.status === 0
+        ? "available"
+        : "soldout";
   const remain = remainVal != null ? remainVal : 0;
 
   return {
@@ -872,7 +883,10 @@ app.get("/api/geocode/reverse", async (req, res) => {
 app.get("/api/location/suggest", async (req, res) => {
   const q = String(req.query.q || "").trim();
   const preferredCity = stripRegionSuffix(String(req.query.city || "").trim());
-  const limit = Math.min(20, Math.max(1, parseIntSafe(req.query.limit || 12, 12)));
+  const limit = Math.min(
+    20,
+    Math.max(1, parseIntSafe(req.query.limit || 12, 12)),
+  );
   if (!q) return res.json({ code: 200, data: [] });
 
   const kw = `%${q}%`;
@@ -933,10 +947,22 @@ app.get("/api/location/suggest", async (req, res) => {
       const scenicSpots = normalizeTextList(row.scenic_spots);
 
       if (stripRegionSuffix(city).includes(stripRegionSuffix(q))) {
-        pushItem({ type: "city", city, county, label: stripRegionSuffix(city), score: 60 });
+        pushItem({
+          type: "city",
+          city,
+          county,
+          label: stripRegionSuffix(city),
+          score: 60,
+        });
       }
       if (stripRegionSuffix(county).includes(stripRegionSuffix(q))) {
-        pushItem({ type: "area", city, county, label: stripRegionSuffix(county), score: 58 });
+        pushItem({
+          type: "area",
+          city,
+          county,
+          label: stripRegionSuffix(county),
+          score: 58,
+        });
       }
       if (nameCn && nameCn.toLowerCase().includes(qNorm)) {
         pushItem({ type: "hotel", city, county, label: nameCn, score: 50 });
@@ -2047,7 +2073,13 @@ app.get("/api/mobile/hotels", async (req, res) => {
           // 优先根据数据库字段 remain 判断可售状态，缺失时退回到 status 字段。
           remain: Number(x.remain != null ? x.remain : 0),
           status:
-            x.remain != null ? (Number(x.remain) > 0 ? "available" : "soldout") : (Number(x.status || 0) === 0 ? "available" : "soldout"),
+            x.remain != null
+              ? Number(x.remain) > 0
+                ? "available"
+                : "soldout"
+              : Number(x.status || 0) === 0
+                ? "available"
+                : "soldout",
           breakfastIncluded: Number(x.breakfast_included || 0) === 1,
           raw: x,
           image:
