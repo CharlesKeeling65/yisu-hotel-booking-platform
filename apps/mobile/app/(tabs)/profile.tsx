@@ -64,7 +64,8 @@ export default function ProfileScreen() {
       contentContainerClassName="px-4 pb-24"
       contentContainerStyle={{ paddingTop: insets.top + 12 }}
       showsVerticalScrollIndicator={true}
-      persistentScrollbar={true}>
+      persistentScrollbar={true}
+    >
       <View className="mt-6 rounded-3xl bg-[#E6F4FF] p-5">
         <View className="flex-row items-center gap-4">
           <View className="h-14 w-14 items-center justify-center rounded-full bg-white">
@@ -79,15 +80,20 @@ export default function ProfileScreen() {
             </Text>
           </View>
           <View className="rounded-full bg-[#FFF7E6] px-3 py-1">
-            <Text className="text-xs font-semibold text-[#FFA940]">积分 {user.points}</Text>
+            <Text className="text-xs font-semibold text-[#FFA940]">
+              积分 {user.points}
+            </Text>
           </View>
         </View>
 
         {!isLoggedIn && (
           <Pressable
             className="mt-5 rounded-2xl bg-[#1890FF] py-3"
-            onPress={handleLogin}>
-            <Text className="text-center text-sm font-semibold text-white">登录 / 注册</Text>
+            onPress={handleLogin}
+          >
+            <Text className="text-center text-sm font-semibold text-white">
+              登录 / 注册
+            </Text>
           </Pressable>
         )}
 
@@ -129,8 +135,12 @@ export default function ProfileScreen() {
           <View className="mt-5 flex-row justify-between rounded-2xl border border-slate-100 bg-white p-4">
             {QUICK_STATS.map((stat) => (
               <View key={stat.label} className="items-center flex-1">
-                <Text className="text-lg font-semibold text-slate-900">{stat.value}</Text>
-                <Text className="mt-1 text-xs text-slate-500">{stat.label}</Text>
+                <Text className="text-lg font-semibold text-slate-900">
+                  {stat.value}
+                </Text>
+                <Text className="mt-1 text-xs text-slate-500">
+                  {stat.label}
+                </Text>
               </View>
             ))}
           </View>
@@ -144,7 +154,8 @@ export default function ProfileScreen() {
 
           <Pressable
             className="mt-5 rounded-2xl border border-[#1890FF] py-3"
-            onPress={() => setIsLoggedIn(false)}>
+            onPress={() => setIsLoggedIn(false)}
+          >
             <Text className="text-center text-sm font-semibold text-[#1890FF]">
               退出登录
             </Text>
@@ -154,7 +165,9 @@ export default function ProfileScreen() {
 
       {!isLoggedIn && (
         <View className="mt-6 rounded-2xl border border-slate-100 bg-white p-4">
-          <Text className="text-base font-semibold text-slate-900">我的旅行计划</Text>
+          <Text className="text-base font-semibold text-slate-900">
+            我的旅行计划
+          </Text>
           <Text className="mt-2 text-sm text-slate-600">
             登录后可查看订单、收藏与优惠券。
           </Text>
