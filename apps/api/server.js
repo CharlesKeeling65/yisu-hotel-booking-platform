@@ -918,7 +918,10 @@ async function queryHotels(req) {
     ${whereBeforeStatus.length ? `WHERE ${whereBeforeStatus.join(" AND ")}` : ""}`;
 
   const [statRows] = await pool.query(statSql, paramsBeforeStatus);
-  const statRow = statRows && statRows[0] ? statRows[0] : { total: 0, pending: 0, approvedOffline: 0, online: 0, rejected: 0 };
+  const statRow =
+    statRows && statRows[0]
+      ? statRows[0]
+      : { total: 0, pending: 0, approvedOffline: 0, online: 0, rejected: 0 };
   const stats = {
     total: Number(statRow.total || 0),
     pending: Number(statRow.pending || 0),
