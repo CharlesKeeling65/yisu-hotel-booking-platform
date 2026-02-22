@@ -65,8 +65,8 @@ export default function BookingScreen() {
     null,
   );
 
-  const roomCount = Math.max(1, Number(rooms || 1));
-  const adultCount = Math.max(roomCount, Number(adults || 1));
+  const [roomsCount, setRoomsCount] = useState(Math.max(1, Number(rooms || 1)));
+  const adultCount = Math.max(roomsCount, Number(adults || 1));
   const childCount = Math.max(0, Number(children || 0));
   const nights = useMemo(
     () => diffNights(checkIn, checkOut),
@@ -102,7 +102,16 @@ export default function BookingScreen() {
     };
   }, [hotelId, roomId]);
 
-  const roomTotal = (room?.price || 0) * nights * roomCount;
+  // 当房型剩余房间数变化时，保证本地选择的 roomsCount 在可用范围内
+  useEffect(() => {
+    const remain = room?.remain;
+    if (typeof remain === "number" && remain > 0) {
+      const remainNum = remain as number;
+      setRoomsCount((c) => Math.min(c, remainNum));
+    }
+  }, [room?.remain]);
+
+  const roomTotal = (room?.price || 0) * nights * roomsCount;
   const coupon = roomTotal >= 200 ? 26 : 0;
   const payable = Math.max(0, roomTotal - coupon);
 
@@ -157,7 +166,7 @@ export default function BookingScreen() {
         checkIn: String(checkIn),
         checkOut: String(checkOut),
         nights,
-        roomsCount: roomCount,
+        roomsCount: roomsCount,
         adultsCount: adultCount,
         childrenCount: childCount,
         guestName: guestName.trim(),
@@ -259,6 +268,9 @@ export default function BookingScreen() {
       );
     }
 
+    const remainMax: number =
+      typeof room?.remain === "number" ? (room.remain as number) : Infinity;
+
     return (
       <ScrollView
         className="flex-1 bg-neutral-50"
@@ -349,9 +361,45 @@ export default function BookingScreen() {
             <View className="mt-3">
               <View className="flex-row items-center justify-between">
                 <Text className="text-sm text-neutral-700">订房间数</Text>
-                <Text className="text-sm font-semibold text-neutral-900">
-                  {roomCount} 间
-                </Text>
+                <View className="flex-row items-center">
+                  <Pressable
+                    onPress={() => setRoomsCount((c) => Math.max(1, c - 1))}
+                    disabled={roomsCount <= 1}
+                    className={`h-8 w-8 items-center justify-center rounded-md border ${
+                      roomsCount <= 1
+                        ? "border-neutral-200"
+                        : "border-neutral-300"
+                    } bg-white`}
+                  >
+                    <Text
+                      className={`${roomsCount <= 1 ? "text-neutral-300" : "text-neutral-700"}`}
+                    >
+                      -
+                    </Text>
+                  </Pressable>
+                  <View className="mx-3 items-center justify-center">
+                    <Text className="text-sm font-semibold text-neutral-900">
+                      {roomsCount} 间
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() =>
+                      setRoomsCount((c) => Math.min(remainMax, c + 1))
+                    }
+                    disabled={remainMax !== Infinity && roomsCount >= remainMax}
+                    className={`h-8 w-8 items-center justify-center rounded-md border ${
+                      remainMax !== Infinity && roomsCount >= remainMax
+                        ? "border-neutral-200"
+                        : "border-neutral-300"
+                    } bg-white`}
+                  >
+                    <Text
+                      className={`${remainMax !== Infinity && roomsCount >= remainMax ? "text-neutral-300" : "text-neutral-700"}`}
+                    >
+                      +
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
 
               <View className="mt-3">
@@ -395,7 +443,7 @@ export default function BookingScreen() {
             </Text>
             <View className="mt-3 flex-row items-center justify-between">
               <Text className="text-sm text-neutral-700">
-                房费 × {roomCount} 间 × {nights} 晚
+                房费 × {roomsCount} 间 × {nights} 晚
               </Text>
               <Text className="text-sm font-semibold text-neutral-900">
                 ¥{roomTotal.toFixed(2)}
