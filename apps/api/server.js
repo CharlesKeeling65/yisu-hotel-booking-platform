@@ -2090,15 +2090,61 @@ app.post("/api/mobile/orders", async (req, res) => {
       updated_at: now,
     };
 
-    await pool.query("INSERT INTO `orders` SET ?", [insertRow]);
+    // 使用事务：先检查并更新房型剩余数量，再插入订单，保证并发安全
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
 
-    const [rows] = await pool.query(
-      "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id WHERE o.id = ? LIMIT 1",
-      [id],
-    );
+      // 查询房型剩余数量并加锁（基于事务）
+      const [roomRows] = await conn.query(
+        "SELECT remain FROM `Room` WHERE id = ? LIMIT 1",
+        [String(p.roomId)],
+      );
+      const roomRow = roomRows[0] || {};
+      const remainVal = roomRow.remain;
 
-    const orderRow = rows[0];
-    return res.json({ code: 200, data: mapMobileOrderRow(orderRow) });
+      // 如果数据库中存在明确的剩余数量（number），则需校验是否足够
+      if (typeof remainVal === "number") {
+        if (remainVal < roomsCount) {
+          await conn.rollback();
+          conn.release();
+          return res
+            .status(400)
+            .json({ code: 400, msg: "房间数量不足，无法下单" });
+        }
+
+        // 扣减剩余房间数
+        const [upd] = await conn.query(
+          "UPDATE `Room` SET remain = remain - ? WHERE id = ? AND remain >= ?",
+          [roomsCount, String(p.roomId), roomsCount],
+        );
+        if (!upd || !upd.affectedRows) {
+          await conn.rollback();
+          conn.release();
+          return res
+            .status(409)
+            .json({ code: 409, msg: "房间数量变动，当前库存不足，请重试" });
+        }
+      }
+
+      // 插入订单
+      await conn.query("INSERT INTO `orders` SET ?", [insertRow]);
+
+      const [rows] = await conn.query(
+        "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id WHERE o.id = ? LIMIT 1",
+        [id],
+      );
+
+      const orderRow = rows[0];
+
+      await conn.commit();
+      conn.release();
+      return res.json({ code: 200, data: mapMobileOrderRow(orderRow) });
+    } catch (err) {
+      await conn.rollback();
+      conn.release();
+      throw err;
+    }
   } catch (e) {
     return res.status(500).json({ code: 500, msg: e.message });
   }
@@ -2163,7 +2209,35 @@ app.get("/api/mobile/orders", async (req, res) => {
   }
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const offset = (page - 1) * pageSize;
+  try {
+    const listParams = params.slice();
+    // 查询列表
+    const [rows] = await pool.query(
+      "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id " +
+        whereSql +
+        " ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
+      listParams.concat([pageSize, offset]),
+    );
 
+    // 查询总数
+    const [countRows] = await pool.query(
+      "SELECT COUNT(*) AS total FROM `orders` o " + whereSql,
+      params,
+    );
+    const total = (countRows && countRows[0] && countRows[0].total) || 0;
+
+    const mapped = (rows || []).map((r) => mapMobileOrderRow(r));
+    return res.json({
+      code: 200,
+      data: mapped,
+      page,
+      pageSize,
+      total,
+      hasMore: offset + (mapped.length || 0) < total,
+    });
+  } catch (e) {
+    return res.status(500).json({ code: 500, msg: e.message });
+  }
 });
 
 app.post("/api/mobile/login", async (req, res) => {
