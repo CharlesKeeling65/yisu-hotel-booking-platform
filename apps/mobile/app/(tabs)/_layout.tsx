@@ -41,15 +41,7 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="reviews"
-        options={{
-          title: "点评",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="text.bubble.fill" color={color} />
-          ),
-        }}
-      />
+      {/* 已移除点评 Tab（页面已删除） */}
       <Tabs.Screen
         name="profile"
         options={{
