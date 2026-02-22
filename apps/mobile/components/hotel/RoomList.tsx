@@ -128,7 +128,9 @@ function RoomRow({
         <View className="mt-1.5 flex-row items-end justify-end">
           <View className="flex-row items-end gap-2.5">
             {(() => {
-              const originalUnit = Number(raw?.original_price ?? room.price ?? 0);
+              const originalUnit = Number(
+                raw?.original_price ?? room.price ?? 0,
+              );
               const priceUnit = Number(room.price ?? 0);
               const showOriginal = originalUnit > priceUnit;
               return (
@@ -149,7 +151,9 @@ function RoomRow({
                   <Text>
                     <Text
                       className="font-semibold text-amber-500"
-                      style={{ fontSize: Math.max(13, Math.floor(priceSize * 0.54)) }}
+                      style={{
+                        fontSize: Math.max(13, Math.floor(priceSize * 0.54)),
+                      }}
                     >
                       ¥
                     </Text>

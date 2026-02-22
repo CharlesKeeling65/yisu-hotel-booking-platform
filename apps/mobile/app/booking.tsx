@@ -64,6 +64,9 @@ export default function BookingScreen() {
   const [currentCustomerId, setCurrentCustomerId] = useState<string | null>(
     null,
   );
+  const [successVisible, setSuccessVisible] = useState(false);
+  const [successCountdown, setSuccessCountdown] = useState(5);
+  const successTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [roomsCount, setRoomsCount] = useState(Math.max(1, Number(rooms || 1)));
   const adultCount = Math.max(roomsCount, Number(adults || 1));
@@ -213,43 +216,44 @@ export default function BookingScreen() {
       Alert.alert("支付失败", e?.message || String(e));
       return;
     }
-
+    // 关闭支付模态并显示 5s 倒计时弹窗；倒计时结束或手动点击将跳转到订单页
     setPayVisible(false);
-
     if (autoBackTimerRef.current) {
       clearTimeout(autoBackTimerRef.current);
+      autoBackTimerRef.current = null;
     }
 
-    autoBackTimerRef.current = setTimeout(() => {
-      router.replace("/(tabs)/cart");
-    }, 5000);
+    // clear any existing success timer
+    if (successTimerRef.current) {
+      clearInterval(successTimerRef.current);
+      successTimerRef.current = null;
+    }
 
-    Alert.alert(
-      "支付成功",
-      "已成功支付，系统将在 5 秒后自动返回订单页面。\n\n您也可以点击“查看订单”马上查看订单。",
-      [
-        {
-          text: "留在此页",
-          style: "cancel",
-        },
-        {
-          text: "查看订单",
-          onPress: () => {
-            if (autoBackTimerRef.current) {
-              clearTimeout(autoBackTimerRef.current);
-              autoBackTimerRef.current = null;
-            }
-            router.replace("/(tabs)/cart");
-          },
-        },
-      ],
-    );
+    setSuccessCountdown(5);
+    setSuccessVisible(true);
+    successTimerRef.current = setInterval(() => {
+      setSuccessCountdown((c) => {
+        if (c <= 1) {
+          if (successTimerRef.current) {
+            clearInterval(successTimerRef.current);
+            successTimerRef.current = null;
+          }
+          setSuccessVisible(false);
+          router.replace("/(tabs)/cart");
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
   };
 
   useEffect(() => {
     return () => {
       if (autoBackTimerRef.current) {
         clearTimeout(autoBackTimerRef.current);
+      }
+      if (successTimerRef.current) {
+        clearInterval(successTimerRef.current);
       }
     };
   }, []);
@@ -534,7 +538,14 @@ export default function BookingScreen() {
             <View className="mt-8 flex-row justify-between">
               <Pressable
                 className="flex-1 rounded-full border border-neutral-300 py-3 mr-2 items-center justify-center"
-                onPress={() => setPayVisible(false)}
+                onPress={() => {
+                  setPayVisible(false);
+                  if (autoBackTimerRef.current) {
+                    clearTimeout(autoBackTimerRef.current);
+                    autoBackTimerRef.current = null;
+                  }
+                  router.replace("/(tabs)/cart");
+                }}
               >
                 <Text className="text-sm font-medium text-neutral-700">
                   取消
@@ -546,6 +557,49 @@ export default function BookingScreen() {
               >
                 <Text className="text-sm font-semibold text-white">
                   确认支付
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={successVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (successTimerRef.current) {
+            clearInterval(successTimerRef.current);
+            successTimerRef.current = null;
+          }
+          setSuccessVisible(false);
+          router.replace("/(tabs)/cart");
+        }}
+      >
+        <View className="flex-1 justify-center items-center bg-black/40">
+          <View className="mx-6 w-[90%] rounded-2xl bg-white px-6 py-6">
+            <Text className="text-center text-base font-semibold text-neutral-900">
+              支付成功
+            </Text>
+            <Text className="mt-2 text-center text-sm text-neutral-500">
+              已成功支付，{successCountdown} 秒后自动跳转订单页
+            </Text>
+
+            <View className="mt-6">
+              <Pressable
+                className="rounded-full bg-[#07C160] py-3 items-center justify-center"
+                onPress={() => {
+                  if (successTimerRef.current) {
+                    clearInterval(successTimerRef.current);
+                    successTimerRef.current = null;
+                  }
+                  setSuccessVisible(false);
+                  router.replace("/(tabs)/cart");
+                }}
+              >
+                <Text className="text-sm font-semibold text-white">
+                  查看订单
                 </Text>
               </Pressable>
             </View>
