@@ -324,6 +324,17 @@ export default function BookingScreen() {
                 >
                   {room.refundable ? "可免费取消" : "不可取消"}
                 </Text>
+                {typeof room.remain === "number" ? (
+                  room.remain === 0 ? (
+                    <Text className="mt-2 text-sm text-red-500">
+                      该房型已售罄，不可预订
+                    </Text>
+                  ) : room.remain > 0 && room.remain <= 4 ? (
+                    <Text className="mt-2 text-sm text-amber-600">
+                      仅剩 {room.remain} 间
+                    </Text>
+                  ) : null
+                ) : null}
               </View>
               <Text className="shrink-0 text-lg font-semibold text-amber-600">
                 ¥{room.price}
@@ -416,7 +427,8 @@ export default function BookingScreen() {
     !!hotel &&
     !!room &&
     guestName.trim().length > 0 &&
-    guestPhone.trim().length > 0;
+    guestPhone.trim().length > 0 &&
+    (room?.remain == null || room?.remain > 0);
 
   return (
     <View className="flex-1 bg-neutral-50">

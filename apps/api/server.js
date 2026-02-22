@@ -1496,15 +1496,15 @@ async function handleBulkRoomSave(req, res) {
         );
       }
     }
-    console.log(
-      "[debug] bulk-save committed, fetched savedRows count:",
-      savedRows.length,
-    );
     await conn.commit();
 
     const [savedRows] = await pool.query(
       "SELECT * FROM `Room` WHERE hotel_id = ? ORDER BY price ASC",
       [hotelId],
+    );
+    console.log(
+      "[debug] bulk-save committed, fetched savedRows count:",
+      savedRows.length,
     );
     const roomIds = savedRows.map((x) => x.id);
     let images = [];
@@ -1885,8 +1885,10 @@ app.get("/api/mobile/hotels", async (req, res) => {
           capacity: Number(x.occupancy || 2),
           bedType: inferBedType(x.name),
           size: x.size ? Number(x.size) : null,
+          remain: Number(x.remain != null ? x.remain : x.status === 0 ? 10 : 0),
           status: Number(x.status || 0) === 0 ? "available" : "soldout",
           breakfastIncluded: Number(x.breakfast_included || 0) === 1,
+          raw: x,
           image:
             rel.roomImageByRoom[x.id] ||
             `https://picsum.photos/seed/room_${x.id}/800/500`,
@@ -1929,8 +1931,10 @@ app.get("/api/mobile/hotels/:id", async (req, res) => {
         capacity: Number(x.occupancy || 2),
         bedType: inferBedType(x.name),
         size: x.size ? Number(x.size) : null,
+        remain: Number(x.remain != null ? x.remain : x.status === 0 ? 10 : 0),
         status: Number(x.status || 0) === 0 ? "available" : "soldout",
         breakfastIncluded: Number(x.breakfast_included || 0) === 1,
+        raw: x,
         image:
           rel.roomImageByRoom[x.id] ||
           `https://picsum.photos/seed/room_${x.id}/800/500`,
@@ -2160,29 +2164,6 @@ app.get("/api/mobile/orders", async (req, res) => {
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const offset = (page - 1) * pageSize;
 
-  try {
-    const [rows] = await pool.query(
-      `SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name
-       FROM \`orders\` o
-       LEFT JOIN \`Hotel_Base\` h ON o.hotel_id = h.id
-       LEFT JOIN \`Room\` r ON o.room_id = r.id
-       ${whereSql}
-       ORDER BY o.created_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset],
-    );
-
-    const [countRows] = await pool.query(
-      `SELECT COUNT(*) AS c FROM \`orders\` o ${whereSql}`,
-      params,
-    );
-    const total = Number(countRows?.[0]?.c || 0);
-    const data = rows.map((r) => mapMobileOrderRow(r));
-    const hasMore = offset + rows.length < total;
-    return res.json({ code: 200, data, page, pageSize, total, hasMore });
-  } catch (e) {
-    return res.status(500).json({ code: 500, msg: e.message });
-  }
 });
 
 app.post("/api/mobile/login", async (req, res) => {
