@@ -85,17 +85,8 @@ export default function Dashboard() {
       if (statusFilter === "online") { params.set("auditStatus", "1"); params.set("onlineStatus", "1"); }
       if (statusFilter === "rejected") params.set("auditStatus", "2");
 
-      const statParams = new URLSearchParams(params);
-      statParams.delete("auditStatus"); statParams.delete("onlineStatus"); statParams.set("pageSize", "200");
-      statParams.set("page", "1");
-
-      const [res, statRes] = await Promise.all([
-        fetch(`/api/hotels?${params.toString()}`),
-        fetch(`/api/hotels?${statParams.toString()}`),
-      ]);
-
+      const res = await fetch(`/api/hotels?${params.toString()}`);
       const j = await res.json().catch(() => null);
-      const statJson = await statRes.json().catch(() => null);
       if (!res.ok) throw new Error(j?.msg || "加载失败");
 
       setHotels(Array.isArray(j?.data) ? j.data : []);
@@ -103,13 +94,13 @@ export default function Dashboard() {
       const totalCount = j?.total || 0;
       setTotalPages(Math.max(1, Math.ceil(totalCount / PAGE_SIZE)));
 
-      const all = Array.isArray(statJson?.data) ? statJson.data : [];
+      const statData = j?.stats || { total: 0, pending: 0, approvedOffline: 0, online: 0, rejected: 0 };
       setStatsCount({
-        total: all.length,
-        pending: all.filter((h) => Number(h.audit_status) === 0).length,
-        approvedOffline: all.filter((h) => Number(h.audit_status) === 1 && Number(h.online_status) === 0).length,
-        online: all.filter((h) => Number(h.audit_status) === 1 && Number(h.online_status) === 1).length,
-        rejected: all.filter((h) => Number(h.audit_status) === 2).length,
+        total: Number(statData.total || 0),
+        pending: Number(statData.pending || 0),
+        approvedOffline: Number(statData.approvedOffline || 0),
+        online: Number(statData.online || 0),
+        rejected: Number(statData.rejected || 0),
       });
     } catch (err) { showToast(err?.message || "加载失败", "error"); }
     finally { setLoading(false); }

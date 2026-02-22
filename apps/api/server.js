@@ -902,12 +902,22 @@ async function queryHotels(req) {
   const offset = (page - 1) * pageSize;
   const paged = data.slice(offset, offset + pageSize);
 
+  // 统计在应用分页前的完整匹配集
+  const stats = {
+    total: data.length,
+    pending: data.filter((h) => Number(h.audit_status) === 0).length,
+    approvedOffline: data.filter((h) => Number(h.audit_status) === 1 && Number(h.online_status) === 0).length,
+    online: data.filter((h) => Number(h.audit_status) === 1 && Number(h.online_status) === 1).length,
+    rejected: data.filter((h) => Number(h.audit_status) === 2).length,
+  };
+
   return {
     page,
     pageSize,
     total: data.length,
     hasMore: offset + pageSize < data.length,
     records: paged,
+    stats,
   };
 }
 
@@ -921,7 +931,95 @@ app.get("/api/hotels", async (req, res) => {
       pageSize: result.pageSize,
       total: result.total,
       hasMore: result.hasMore,
+      stats: result.stats,
     });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e.message });
+  }
+});
+
+// 统计接口：按当前筛选条件返回各状态数量（total / pending / approvedOffline / online / rejected）
+app.get("/api/hotels/stats", async (req, res) => {
+  try {
+    const q = req.query || {};
+    const scope = String(q.scope || "public");
+
+    const where = [];
+    const params = [];
+
+    if (scope === "public") {
+      where.push("a.audit_status = 1 AND a.online_status = 1");
+    }
+
+    if (scope === "merchant") {
+      const merchantId = String(q.merchantId || "").trim();
+      if (merchantId) {
+        where.push("b.merchantId = ?");
+        params.push(merchantId);
+      }
+    }
+
+    if (q.auditStatus !== undefined && q.auditStatus !== "") {
+      where.push("a.audit_status = ?");
+      params.push(parseIntSafe(q.auditStatus, 0));
+    }
+    if (q.onlineStatus !== undefined && q.onlineStatus !== "") {
+      where.push("a.online_status = ?");
+      params.push(parseIntSafe(q.onlineStatus, 0));
+    }
+
+    if (q.city) {
+      const cityRaw = String(q.city).trim();
+      const cityNorm = normalizeRegionName(cityRaw);
+      where.push(`(
+      b.city = ?
+      OR b.county = ?
+      OR LOWER(REPLACE(REPLACE(REPLACE(b.city,'省',''),'市',''),'县','')) = ?
+      OR LOWER(REPLACE(REPLACE(REPLACE(b.county,'省',''),'市',''),'县','')) = ?
+    )`);
+      params.push(cityRaw, cityRaw, cityNorm, cityNorm);
+    }
+
+    if (q.keyword) {
+      where.push(`(
+      b.name_cn LIKE ?
+      OR b.name_en LIKE ?
+      OR b.address LIKE ?
+      OR b.scenic_spots LIKE ?
+      OR EXISTS (
+        SELECT 1
+        FROM ` + "`Hotel_Label_Rel`" + ` rel
+        JOIN ` + "`Facility_Label`" + ` l ON rel.label_id = l.id
+        WHERE rel.hotel_id = b.id
+          AND (l.label_name LIKE ? OR l.label_code LIKE ?)
+      )
+    )`);
+      const kw = `%${String(q.keyword).trim()}%`;
+      params.push(kw, kw, kw, kw, kw, kw);
+    }
+
+    // 统计查询，使用 MySQL 的条件求和避免拉取大量记录
+    const statSql = `SELECT
+      COUNT(*) AS total,
+      SUM(a.audit_status = 0) AS pending,
+      SUM(a.audit_status = 1 AND a.online_status = 0) AS approvedOffline,
+      SUM(a.audit_status = 1 AND a.online_status = 1) AS online,
+      SUM(a.audit_status = 2) AS rejected
+      FROM \`Hotel_Base\` b
+      LEFT JOIN \`Hotel_Audit\` a ON a.hotel_id = b.id
+      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}`;
+
+    const [rows] = await pool.query(statSql, params);
+    const r = rows && rows[0] ? rows[0] : { total: 0, pending: 0, approvedOffline: 0, online: 0, rejected: 0 };
+    // ensure numbers
+    const out = {
+      total: Number(r.total || 0),
+      pending: Number(r.pending || 0),
+      approvedOffline: Number(r.approvedOffline || 0),
+      online: Number(r.online || 0),
+      rejected: Number(r.rejected || 0),
+    };
+    res.json({ code: 200, data: out });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e.message });
   }
