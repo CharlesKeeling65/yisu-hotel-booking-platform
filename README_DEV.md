@@ -138,3 +138,8 @@ npm test
 4、在项目根目录执行`npm install`安装依赖
 5、根目录执行`npm run dev`
 6、http://localhost:5173/进入商家/管理端，http://localhost:8081进入用户端
+
+20260222
+新增数据库补丁脚本：apps\api\sql\migrate_add_room_fields.sql
+解决房间字段缺失问题
+不用修改原先的建表脚本，直接执行该脚本可以实现新增original_price、discount、remain、remark字段
