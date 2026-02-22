@@ -13,7 +13,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { createMobileOrder, fetchMobileHotelById, payMobileOrder } from "@/lib/api";
+import {
+  createMobileOrder,
+  fetchMobileHotelById,
+  payMobileOrder,
+} from "@/lib/api";
 import type { Hotel, Room } from "@yisu/shared";
 
 function toCnDate(s: string) {
@@ -57,7 +61,9 @@ export default function BookingScreen() {
   const [payVisible, setPayVisible] = useState(false);
   const autoBackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
-  const [currentCustomerId, setCurrentCustomerId] = useState<string | null>(null);
+  const [currentCustomerId, setCurrentCustomerId] = useState<string | null>(
+    null,
+  );
 
   const roomCount = Math.max(1, Number(rooms || 1));
   const adultCount = Math.max(roomCount, Number(adults || 1));
