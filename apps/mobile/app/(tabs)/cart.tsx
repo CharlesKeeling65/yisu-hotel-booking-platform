@@ -7,10 +7,12 @@
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Modal,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -19,7 +21,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fetchMobileOrders, type MobileOrder } from "@/lib/api";
+import { fetchMobileOrders, payMobileOrder, type MobileOrder } from "@/lib/api";
 
 type StatusKey = "all" | "pending" | "upcoming" | "completed";
 
@@ -30,7 +32,7 @@ const STATUS_TABS: Array<{ key: StatusKey; label: string }> = [
   { key: "completed", label: "待点评" },
 ];
 
-function OrderCard({ order }: { order: MobileOrder }) {
+function OrderCard({ order, onPay, onView }: { order: MobileOrder; onPay?: (o: MobileOrder) => void; onView?: (o: MobileOrder) => void }) {
   const dateText =
     order.checkIn && order.checkOut
       ? `${order.checkIn}至${order.checkOut}`
@@ -65,6 +67,36 @@ function OrderCard({ order }: { order: MobileOrder }) {
         </Text>
         <Text style={styles.amountText}>{amountText}</Text>
       </View>
+      <View style={{ marginTop: 10, flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
+        <Pressable
+          onPress={() => {
+            if (onView) onView(order);
+          }}
+          style={{
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: "#E5E7EB",
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            marginRight: 8,
+          }}
+        >
+          <Text style={{ color: "#374151", fontWeight: "600" }}>查看订单</Text>
+        </Pressable>
+        {order.paymentStatus === "unpaid" && onPay && (
+          <Pressable
+            onPress={() => onPay(order)}
+            style={{
+              backgroundColor: "#1890FF",
+              paddingVertical: 8,
+              paddingHorizontal: 14,
+              borderRadius: 8,
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "600" }}>去付款</Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -75,6 +107,12 @@ export default function OrdersScreen() {
 
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [orders, setOrders] = useState<MobileOrder[]>([]);
+  const [payVisible, setPayVisible] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<MobileOrder | null>(null);
+  const [processingPay, setProcessingPay] = useState(false);
+  const [successVisible, setSuccessVisible] = useState(false);
+  const [successCountdown, setSuccessCountdown] = useState(5);
+  const successTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [activeStatus, setActiveStatus] = useState<StatusKey>("all");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -97,6 +135,15 @@ export default function OrdersScreen() {
     })();
     return () => {
       mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (successTimerRef.current) {
+        clearInterval(successTimerRef.current);
+        successTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -141,6 +188,54 @@ export default function OrdersScreen() {
     }
   };
 
+  const openPayFor = (order: MobileOrder) => {
+    setSelectedOrder(order);
+    setPayVisible(true);
+  };
+
+  const handleConfirmPay = async () => {
+    if (!selectedOrder || !customerId) {
+      Alert.alert("无法支付", "缺少订单或未登录");
+      return;
+    }
+    setProcessingPay(true);
+    try {
+      await payMobileOrder(selectedOrder.id, customerId);
+    } catch (e: any) {
+      Alert.alert("支付失败", e?.message || String(e));
+      setProcessingPay(false);
+      return;
+    }
+
+    setProcessingPay(false);
+    setPayVisible(false);
+    setSelectedOrder(null);
+    // 刷新列表以反映已支付状态
+    await handleRefresh();
+
+    // 显示 5s 倒计时弹窗，倒计时结束自动跳转到订单页
+    if (successTimerRef.current) {
+      clearInterval(successTimerRef.current);
+      successTimerRef.current = null;
+    }
+    setSuccessCountdown(5);
+    setSuccessVisible(true);
+    successTimerRef.current = setInterval(() => {
+      setSuccessCountdown((c) => {
+        if (c <= 1) {
+          if (successTimerRef.current) {
+            clearInterval(successTimerRef.current);
+            successTimerRef.current = null;
+          }
+          setSuccessVisible(false);
+          router.replace("/(tabs)/cart");
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+  };
+
   const renderContent = () => {
     if (!customerId) {
       return (
@@ -179,7 +274,13 @@ export default function OrdersScreen() {
       <FlatList
         data={orders}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <OrderCard order={item} />}
+        renderItem={({ item }) => (
+          <OrderCard
+            order={item}
+            onPay={(o) => openPayFor(o)}
+            onView={(o) => router.push({ pathname: "/order/[id]", params: { id: o.id } })}
+          />
+        )}
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl
@@ -224,6 +325,75 @@ export default function OrdersScreen() {
       <View style={styles.divider} />
 
       <View style={styles.body}>{renderContent()}</View>
+      <Modal
+        visible={payVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPayVisible(false)}
+      >
+        <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.4)" }}>
+          <View style={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, backgroundColor: "#fff", padding: 20 }}>
+            <Text style={{ textAlign: "center", fontSize: 16, fontWeight: "600" }}>微信支付</Text>
+            <Text style={{ marginTop: 8, textAlign: "center", color: "#6B7280", fontSize: 12 }}>模拟微信支付（不会真实扣款）</Text>
+            <Text style={{ marginTop: 16, textAlign: "center", fontSize: 28, color: "#10B981", fontWeight: "700" }}>
+              ¥{selectedOrder ? selectedOrder.payableAmount.toFixed(2) : "0.00"}
+            </Text>
+
+            <View style={{ flexDirection: "row", marginTop: 20 }}>
+              <Pressable
+                style={{ flex: 1, borderRadius: 999, borderWidth: 1, borderColor: "#E5E7EB", paddingVertical: 12, alignItems: "center", marginRight: 8 }}
+                onPress={() => setPayVisible(false)}
+              >
+                <Text style={{ color: "#374151" }}>取消</Text>
+              </Pressable>
+              <Pressable
+                style={{ flex: 1, borderRadius: 999, backgroundColor: "#1890FF", paddingVertical: 12, alignItems: "center", marginLeft: 8 }}
+                onPress={handleConfirmPay}
+                disabled={processingPay}
+              >
+                <Text style={{ color: "#fff", fontWeight: "600" }}>{processingPay ? "支付中..." : "确认支付"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={successVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (successTimerRef.current) {
+            clearInterval(successTimerRef.current);
+            successTimerRef.current = null;
+          }
+          setSuccessVisible(false);
+          router.replace("/(tabs)/cart");
+        }}
+      >
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.4)" }}>
+          <View style={{ width: "90%", borderRadius: 16, backgroundColor: "#fff", padding: 20 }}>
+            <Text style={{ textAlign: "center", fontSize: 16, fontWeight: "600" }}>支付成功</Text>
+            <Text style={{ marginTop: 8, textAlign: "center", color: "#6B7280", fontSize: 12 }}>
+              已成功支付，{successCountdown} 秒后自动跳转订单页
+            </Text>
+            <View style={{ marginTop: 16 }}>
+              <Pressable
+                style={{ borderRadius: 999, backgroundColor: "#1890FF", paddingVertical: 12, alignItems: "center" }}
+                onPress={() => {
+                  if (successTimerRef.current) {
+                    clearInterval(successTimerRef.current);
+                    successTimerRef.current = null;
+                  }
+                  setSuccessVisible(false);
+                  router.replace("/(tabs)/cart");
+                }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "600" }}>查看订单</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
