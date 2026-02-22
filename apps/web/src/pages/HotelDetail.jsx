@@ -23,7 +23,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react"; // eslint-disable-line no-unused-vars
 import { useNavigate, useParams } from "react-router-dom";
 import "../styles/hotel-detail.css";
 
