@@ -533,7 +533,7 @@ export default function LocationScreen() {
         {regionLoading ? (
           <Text className="py-3 text-xs text-slate-400">加载全国省市县数据中...</Text>
         ) : (
-          <ScrollView className="max-h-80">
+          <ScrollView className="max-h-80" showsVerticalScrollIndicator={true} persistentScrollbar={true}>
             {activeOptions.map((item) => (
               <Pressable
                 key={item.code}

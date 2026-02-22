@@ -195,7 +195,7 @@ export default function HomeScreen() {
   }, [city, location, checkInDate, checkOutDate, rooms, adults, children, priceStarFilter])
 
   return (
-    <ScrollView className="flex-1 bg-[#F5F8FC]" contentContainerClassName="px-4 pb-24" style={{ paddingTop: insets.top + 8 }}>
+    <ScrollView className="flex-1 bg-[#F5F8FC]" contentContainerClassName="px-4 pb-24" style={{ paddingTop: insets.top + 8 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
       <MeasuredPagingCarousel
         data={banners}
         autoPlayMs={4800}

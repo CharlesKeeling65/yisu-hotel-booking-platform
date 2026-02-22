@@ -62,7 +62,9 @@ export default function ProfileScreen() {
     <ScrollView
       className="flex-1 bg-white"
       contentContainerClassName="px-4 pb-24"
-      contentContainerStyle={{ paddingTop: insets.top + 12 }}>
+      contentContainerStyle={{ paddingTop: insets.top + 12 }}
+      showsVerticalScrollIndicator={true}
+      persistentScrollbar={true}>
       <View className="mt-6 rounded-3xl bg-[#E6F4FF] p-5">
         <View className="flex-row items-center gap-4">
           <View className="h-14 w-14 items-center justify-center rounded-full bg-white">

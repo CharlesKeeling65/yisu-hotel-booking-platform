@@ -191,7 +191,7 @@ export default function HotelDetailScreen() {
 
   return (
     <View className="flex-1 bg-neutral-50">
-      <ScrollView className="flex-1 bg-neutral-50" contentContainerStyle={{ paddingTop: insets.top + 54, paddingBottom: 96 }}>
+      <ScrollView className="flex-1 bg-neutral-50" contentContainerStyle={{ paddingTop: insets.top + 54, paddingBottom: 96 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
         <MeasuredPagingCarousel
           data={images}
           autoPlayMs={5000}
