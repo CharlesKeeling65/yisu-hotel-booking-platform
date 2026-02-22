@@ -5,6 +5,7 @@ const rooms: Record<string, Room[]> = {
     {
       id: "r1",
       name: "Deluxe King",
+      remain: 6,
       price: 680,
       capacity: 2,
       bedType: "King",
@@ -14,6 +15,7 @@ const rooms: Record<string, Room[]> = {
     {
       id: "r2",
       name: "City View Twin",
+      remain: 0,
       price: 520,
       capacity: 2,
       bedType: "Twin",
@@ -25,6 +27,7 @@ const rooms: Record<string, Room[]> = {
     {
       id: "r3",
       name: "Executive Suite",
+      remain: 3,
       price: 980,
       capacity: 3,
       bedType: "King",
@@ -34,6 +37,7 @@ const rooms: Record<string, Room[]> = {
     {
       id: "r4",
       name: "Superior Queen",
+      remain: 2,
       price: 720,
       capacity: 2,
       bedType: "Queen",
@@ -45,6 +49,7 @@ const rooms: Record<string, Room[]> = {
     {
       id: "r5",
       name: "Family Room",
+      remain: 10,
       price: 640,
       capacity: 4,
       bedType: "Twin",
@@ -54,6 +59,7 @@ const rooms: Record<string, Room[]> = {
     {
       id: "r6",
       name: "Standard Queen",
+      remain: 1,
       price: 420,
       capacity: 2,
       bedType: "Queen",
@@ -120,7 +126,8 @@ export const hotels: Hotel[] = [
   },
 ];
 
-export const getHotelById = (id: string) => hotels.find((hotel) => hotel.id === id);
+export const getHotelById = (id: string) =>
+  hotels.find((hotel) => hotel.id === id);
 
 export const getSortedRooms = (hotel: Hotel | undefined) => {
   if (!hotel) return [];

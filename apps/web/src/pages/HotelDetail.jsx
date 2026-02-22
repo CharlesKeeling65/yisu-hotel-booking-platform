@@ -20,7 +20,7 @@ import {
   Star,
   UserCircle,
   Users,
-  X
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react"; // eslint-disable-line no-unused-vars
 import { useNavigate, useParams } from "react-router-dom";
@@ -698,19 +698,10 @@ export default function HotelDetail() {
                                 )}
 
                                 {(() => {
-                                  const cancelTag = tags.find((t) =>
-                                    /免费.*取消|免费取消|可取消/.test(t),
-                                  );
                                   const noCancelTag = tags.find((t) =>
                                     /不可.*取消|不可取消/.test(t),
                                   );
-                                  if (cancelTag) {
-                                    return (
-                                      <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
-                                        <CheckCircle2 size={14} /> {cancelTag}
-                                      </span>
-                                    );
-                                  }
+                                  // 不再显示“免费取消/可取消”绿色标识，保留“不可取消”灰色显示
                                   if (noCancelTag) {
                                     return (
                                       <span className="flex items-center gap-1.5 text-slate-400">

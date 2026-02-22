@@ -26,12 +26,27 @@ function normalizeRow(row = {}) {
   return {
     ...row,
     id: row.id ? String(row.id) : undefined,
-    original: toFiniteNumber(row.original),
-    current: toFiniteNumber(row.current),
-    remain: toFiniteNumber(row.remain),
-    discount: row.discount || "",
+    // 保持原始字段的可回显性：当服务器返回 0 时也应显示为 0，而不是被空字符串覆盖
+    original:
+      row.original === undefined || row.original === null || row.original === ""
+        ? ""
+        : toFiniteNumber(row.original),
+    current:
+      row.current === undefined || row.current === null || row.current === ""
+        ? ""
+        : toFiniteNumber(row.current),
+    remain:
+      row.remain === undefined || row.remain === null || row.remain === ""
+        ? ""
+        : toFiniteNumber(row.remain),
+    // Treat display placeholder "无" as empty value for persistence
+    discount: row.discount && row.discount !== "无" ? row.discount : "",
+    // 保留 area 字段并同步 size，避免规范化后页面绑定到 `area` 的输入框无法读取初始值
+    area: row.area || row.size || "",
     size: row.area || row.size || "",
-    capacity: row.capacity || "",
+    // 支持新字段 `occupancy`（可入住人数），向后兼容 `capacity`
+    occupancy: row.occupancy || row.capacity || "",
+    capacity: row.capacity || row.occupancy || "",
     status: row.status || "available",
     // remark is stored as a comma-joined string for server compatibility
     remark: Array.isArray(row.remarkTags)
@@ -102,8 +117,14 @@ export default function HotelRooms() {
         const idKey = r.id ? String(r.id) : "";
         const typeKey = r.type ? String(r.type).trim() : "";
         const matched = localExtras[idKey] || localExtras[typeKey] || {};
-        // If matched.remark exists as comma list, expose as remark and remarkTags
-        const patched = { ...r, ...matched };
+        // Only apply non-empty local overrides so不会覆盖服务器返回的有效值
+        const safeMatched = {};
+        Object.keys(matched || {}).forEach((k) => {
+          const v = matched[k];
+          if (v !== undefined && v !== null && String(v) !== "")
+            safeMatched[k] = v;
+        });
+        const patched = { ...r, ...safeMatched };
         if (patched.remark && !patched.remarkTags) {
           patched.remarkTags = String(patched.remark)
             .split(",")
@@ -125,7 +146,9 @@ export default function HotelRooms() {
         discount: r.discount,
         area: r.area,
         size: r.size || r.area,
-        capacity: r.capacity,
+        // persist occupancy 优先，向后兼容 capacity
+        occupancy: r.occupancy || r.capacity,
+        capacity: r.occupancy || r.capacity,
         remark: r.remark,
       };
       // keep remarkTags in runtime but persist remark string for compatibility
@@ -701,9 +724,9 @@ export default function HotelRooms() {
                       type="number"
                       className={inputClass}
                       placeholder="如：2"
-                      value={r.capacity || ""}
+                      value={r.occupancy || r.capacity || ""}
                       onChange={(e) =>
-                        updateRow(idx, { capacity: e.target.value })
+                        updateRow(idx, { occupancy: e.target.value })
                       }
                     />
                   </div>
@@ -713,7 +736,7 @@ export default function HotelRooms() {
                       type="number"
                       className={inputClass}
                       placeholder="0"
-                      value={r.remain || ""}
+                      value={r.remain === "" ? "" : r.remain}
                       onChange={(e) =>
                         handleFieldChange(idx, "remain", e.target.value)
                       }
@@ -738,7 +761,11 @@ export default function HotelRooms() {
                     <input
                       className={inputClass}
                       placeholder="如：8折或85折"
-                      value={r.discount || ""}
+                      value={
+                        r.discount === "" || r.discount == null
+                          ? "无"
+                          : r.discount
+                      }
                       onChange={(e) =>
                         handleFieldChange(idx, "discount", e.target.value)
                       }

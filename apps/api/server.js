@@ -1547,6 +1547,11 @@ app.get("/api/hotels/:id/rooms", async (req, res) => {
 app.post("/api/hotels/:id/rooms", async (req, res) => {
   const { id: hotelId } = req.params;
   const p = req.body || {};
+  console.log(
+    "[debug] POST /api/hotels/%s/rooms payload:",
+    hotelId,
+    JSON.stringify(p).slice(0, 200),
+  );
   const roomId = genId("room");
   try {
     await pool.query(
@@ -1587,6 +1592,12 @@ app.post("/api/hotels/:id/rooms", async (req, res) => {
 async function handleBulkRoomSave(req, res) {
   const { id: hotelId } = req.params;
   const rooms = Array.isArray(req.body?.rooms) ? req.body.rooms : [];
+  console.log("[debug] bulk-save rooms count:", rooms.length);
+  if (rooms.length)
+    console.log(
+      "[debug] first item sample:",
+      JSON.stringify(rooms[0]).slice(0, 200),
+    );
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -1636,12 +1647,15 @@ async function handleBulkRoomSave(req, res) {
         );
       }
     }
-
     await conn.commit();
 
     const [savedRows] = await pool.query(
       "SELECT * FROM `Room` WHERE hotel_id = ? ORDER BY price ASC",
       [hotelId],
+    );
+    console.log(
+      "[debug] bulk-save committed, fetched savedRows count:",
+      savedRows.length,
     );
     const roomIds = savedRows.map((x) => x.id);
     let images = [];
@@ -2022,8 +2036,10 @@ app.get("/api/mobile/hotels", async (req, res) => {
           capacity: Number(x.occupancy || 2),
           bedType: inferBedType(x.name),
           size: x.size ? Number(x.size) : null,
+          remain: Number(x.remain != null ? x.remain : x.status === 0 ? 10 : 0),
           status: Number(x.status || 0) === 0 ? "available" : "soldout",
           breakfastIncluded: Number(x.breakfast_included || 0) === 1,
+          raw: x,
           image:
             rel.roomImageByRoom[x.id] ||
             `https://picsum.photos/seed/room_${x.id}/800/500`,
@@ -2066,8 +2082,10 @@ app.get("/api/mobile/hotels/:id", async (req, res) => {
         capacity: Number(x.occupancy || 2),
         bedType: inferBedType(x.name),
         size: x.size ? Number(x.size) : null,
+        remain: Number(x.remain != null ? x.remain : x.status === 0 ? 10 : 0),
         status: Number(x.status || 0) === 0 ? "available" : "soldout",
         breakfastIncluded: Number(x.breakfast_included || 0) === 1,
+        raw: x,
         image:
           rel.roomImageByRoom[x.id] ||
           `https://picsum.photos/seed/room_${x.id}/800/500`,
@@ -2223,15 +2241,61 @@ app.post("/api/mobile/orders", async (req, res) => {
       updated_at: now,
     };
 
-    await pool.query("INSERT INTO `orders` SET ?", [insertRow]);
+    // 使用事务：先检查并更新房型剩余数量，再插入订单，保证并发安全
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
 
-    const [rows] = await pool.query(
-      "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id WHERE o.id = ? LIMIT 1",
-      [id],
-    );
+      // 查询房型剩余数量并加锁（基于事务）
+      const [roomRows] = await conn.query(
+        "SELECT remain FROM `Room` WHERE id = ? LIMIT 1",
+        [String(p.roomId)],
+      );
+      const roomRow = roomRows[0] || {};
+      const remainVal = roomRow.remain;
 
-    const orderRow = rows[0];
-    return res.json({ code: 200, data: mapMobileOrderRow(orderRow) });
+      // 如果数据库中存在明确的剩余数量（number），则需校验是否足够
+      if (typeof remainVal === "number") {
+        if (remainVal < roomsCount) {
+          await conn.rollback();
+          conn.release();
+          return res
+            .status(400)
+            .json({ code: 400, msg: "房间数量不足，无法下单" });
+        }
+
+        // 扣减剩余房间数
+        const [upd] = await conn.query(
+          "UPDATE `Room` SET remain = remain - ? WHERE id = ? AND remain >= ?",
+          [roomsCount, String(p.roomId), roomsCount],
+        );
+        if (!upd || !upd.affectedRows) {
+          await conn.rollback();
+          conn.release();
+          return res
+            .status(409)
+            .json({ code: 409, msg: "房间数量变动，当前库存不足，请重试" });
+        }
+      }
+
+      // 插入订单
+      await conn.query("INSERT INTO `orders` SET ?", [insertRow]);
+
+      const [rows] = await conn.query(
+        "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id WHERE o.id = ? LIMIT 1",
+        [id],
+      );
+
+      const orderRow = rows[0];
+
+      await conn.commit();
+      conn.release();
+      return res.json({ code: 200, data: mapMobileOrderRow(orderRow) });
+    } catch (err) {
+      await conn.rollback();
+      conn.release();
+      throw err;
+    }
   } catch (e) {
     return res.status(500).json({ code: 500, msg: e.message });
   }
@@ -2296,27 +2360,32 @@ app.get("/api/mobile/orders", async (req, res) => {
   }
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const offset = (page - 1) * pageSize;
-
   try {
+    const listParams = params.slice();
+    // 查询列表
     const [rows] = await pool.query(
-      `SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name
-       FROM \`orders\` o
-       LEFT JOIN \`Hotel_Base\` h ON o.hotel_id = h.id
-       LEFT JOIN \`Room\` r ON o.room_id = r.id
-       ${whereSql}
-       ORDER BY o.created_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset],
+      "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id " +
+        whereSql +
+        " ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
+      listParams.concat([pageSize, offset]),
     );
 
+    // 查询总数
     const [countRows] = await pool.query(
-      `SELECT COUNT(*) AS c FROM \`orders\` o ${whereSql}`,
+      "SELECT COUNT(*) AS total FROM `orders` o " + whereSql,
       params,
     );
-    const total = Number(countRows?.[0]?.c || 0);
-    const data = rows.map((r) => mapMobileOrderRow(r));
-    const hasMore = offset + rows.length < total;
-    return res.json({ code: 200, data, page, pageSize, total, hasMore });
+    const total = (countRows && countRows[0] && countRows[0].total) || 0;
+
+    const mapped = (rows || []).map((r) => mapMobileOrderRow(r));
+    return res.json({
+      code: 200,
+      data: mapped,
+      page,
+      pageSize,
+      total,
+      hasMore: offset + (mapped.length || 0) < total,
+    });
   } catch (e) {
     return res.status(500).json({ code: 500, msg: e.message });
   }
