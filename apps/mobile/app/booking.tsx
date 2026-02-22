@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import DateRangePickerSheet from "@/components/hotel/DateRangePickerSheet";
 import {
   createMobileOrder,
   fetchMobileHotelById,
@@ -69,12 +70,20 @@ export default function BookingScreen() {
   const successTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [roomsCount, setRoomsCount] = useState(Math.max(1, Number(rooms || 1)));
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [localCheckIn, setLocalCheckIn] = useState(String(checkIn ?? ""));
+  const [localCheckOut, setLocalCheckOut] = useState(String(checkOut ?? ""));
   const adultCount = Math.max(roomsCount, Number(adults || 1));
   const childCount = Math.max(0, Number(children || 0));
   const nights = useMemo(
-    () => diffNights(checkIn, checkOut),
-    [checkIn, checkOut],
+    () => diffNights(localCheckIn, localCheckOut),
+    [localCheckIn, localCheckOut],
   );
+
+  useEffect(() => {
+    setLocalCheckIn(String(checkIn ?? ""));
+    setLocalCheckOut(String(checkOut ?? ""));
+  }, [checkIn, checkOut]);
 
   useEffect(() => {
     if (!hotelId) {
@@ -176,8 +185,8 @@ export default function BookingScreen() {
         customerId,
         hotelId: String(hotel.id),
         roomId: String(room.id),
-        checkIn: String(checkIn),
-        checkOut: String(checkOut),
+        checkIn: String(localCheckIn),
+        checkOut: String(localCheckOut),
         nights,
         roomsCount: roomsCount,
         adultsCount: adultCount,
@@ -310,18 +319,22 @@ export default function BookingScreen() {
             <View className="mt-3 flex-row items-center justify-between">
               <View>
                 <Text className="text-xs text-neutral-500">入住</Text>
-                <Text className="mt-0.5 text-base font-semibold text-neutral-900">
-                  {toCnDate(String(checkIn))}
-                </Text>
+                <Pressable onPress={() => setDatePickerVisible(true)}>
+                  <Text className="mt-0.5 text-base font-semibold text-neutral-900">
+                    {toCnDate(String(localCheckIn))}
+                  </Text>
+                </Pressable>
               </View>
               <Text className="px-2 text-sm text-neutral-500">
                 共 {nights} 晚
               </Text>
               <View className="items-end">
                 <Text className="text-xs text-neutral-500">离店</Text>
-                <Text className="mt-0.5 text-base font-semibold text-neutral-900">
-                  {toCnDate(String(checkOut))}
-                </Text>
+                <Pressable onPress={() => setDatePickerVisible(true)}>
+                  <Text className="mt-0.5 text-base font-semibold text-neutral-900">
+                    {toCnDate(String(localCheckOut))}
+                  </Text>
+                </Pressable>
               </View>
             </View>
           </View>
@@ -338,19 +351,49 @@ export default function BookingScreen() {
                 >
                   {room.name}
                 </Text>
-                <Text
-                  className="mt-1 text-xs text-neutral-500"
-                  numberOfLines={2}
-                >
-                  {room.bedType} · 可住 {room.capacity} 人 ·{" "}
-                  {room.breakfastIncluded ? "含早餐" : "不含早餐"}
-                </Text>
-                <Text
-                  className="mt-1 text-xs text-neutral-500"
-                  numberOfLines={2}
-                >
-                  {room.refundable ? "可免费取消" : "不可取消"}
-                </Text>
+                {(() => {
+                  const raw = (room as any).raw;
+                  const capacity = raw?.occupancy ?? room.capacity;
+                  const area = raw?.size ?? room.size ?? raw?.area;
+                  let tags: string[] = [];
+                  if (Array.isArray(raw?.remarkTags)) tags = raw.remarkTags;
+                  else if (raw?.remark)
+                    tags = String(raw.remark)
+                      .split(",")
+                      .map((s: string) => s.trim())
+                      .filter(Boolean);
+                  else if ((room as any).remarkTags)
+                    tags = (room as any).remarkTags;
+                  else if ((room as any).remark)
+                    tags = String((room as any).remark)
+                      .split(",")
+                      .map((s: string) => s.trim())
+                      .filter(Boolean);
+
+                  return (
+                    <View className="mt-2 flex-row flex-wrap items-center gap-2">
+                      <View className="flex-row items-center gap-1.5 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                        <Text className="text-xs text-slate-600">
+                          最多 {capacity ?? "-"} 人
+                        </Text>
+                      </View>
+                      <View className="flex-row items-center gap-1.5 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                        <Text className="text-xs text-slate-600">
+                          面积 {area ?? "-"} ㎡
+                        </Text>
+                      </View>
+                      {tags.length > 0 &&
+                        tags.map((t) => (
+                          <Text
+                            key={t}
+                            className="px-2 py-0.5 bg-slate-50 text-slate-600 rounded-md text-xs font-medium border border-slate-100/60"
+                          >
+                            {t}
+                          </Text>
+                        ))}
+                    </View>
+                  );
+                })()}
                 {typeof room.remain === "number" ? (
                   room.remain === 0 ? (
                     <Text className="mt-2 text-sm text-red-500">
@@ -447,7 +490,7 @@ export default function BookingScreen() {
               </View>
 
               <Text className="mt-3 text-sm text-neutral-700">
-                下单后可在“我的-订单”查看进度。
+                下单后可在订单中查看进度。
               </Text>
             </View>
           </View>
@@ -606,6 +649,18 @@ export default function BookingScreen() {
           </View>
         </View>
       </Modal>
+
+      <DateRangePickerSheet
+        visible={datePickerVisible}
+        checkInDate={localCheckIn}
+        checkOutDate={localCheckOut}
+        onClose={() => setDatePickerVisible(false)}
+        onConfirm={(next) => {
+          setLocalCheckIn(next.checkInDate);
+          setLocalCheckOut(next.checkOutDate);
+          setDatePickerVisible(false);
+        }}
+      />
 
       <View
         className="absolute bottom-0 left-0 right-0 flex-row items-center border-t border-neutral-200 bg-white px-4"
