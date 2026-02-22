@@ -396,9 +396,9 @@ async function initDbPool() {
     charset: "utf8mb4",
   });
 
-  const schemaPath = path.join(__dirname, "sql", "init_schema.sql");
-  if (fs.existsSync(schemaPath)) {
-    const sql = fs.readFileSync(schemaPath, "utf8");
+  async function runSqlFileStatements(filePath, ignoreComment = "") {
+    if (!fs.existsSync(filePath)) return;
+    const sql = fs.readFileSync(filePath, "utf8");
     const stmts = sql
       .split(/;\s*\n/)
       .map((s) => s.trim())
@@ -407,10 +407,16 @@ async function initDbPool() {
       try {
         await pool.query(s);
       } catch {
-        // ignore single statement errors for compatibility
+        // ignore single statement errors for compatibility / repeatable init
+        if (ignoreComment) {
+          // keep branch for readability and future debugging hooks
+        }
       }
     }
   }
+
+  const schemaPath = path.join(__dirname, "sql", "init_schema.sql");
+  await runSqlFileStatements(schemaPath, "schema init");
 
   // Ensure orders table exists for mobile booking flow
   const ordersSchemaPath = path.join(
@@ -418,20 +424,7 @@ async function initDbPool() {
     "sql",
     "create_orders_table.sql",
   );
-  if (fs.existsSync(ordersSchemaPath)) {
-    const sql = fs.readFileSync(ordersSchemaPath, "utf8");
-    const stmts = sql
-      .split(/;\s*\n/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    for (const s of stmts) {
-      try {
-        await pool.query(s);
-      } catch {
-        // ignore errors when indexes or tables already exist
-      }
-    }
-  }
+  await runSqlFileStatements(ordersSchemaPath, "orders schema init");
 
   // Best-effort lightweight migration for orders table to ensure new columns exist
   try {
@@ -452,20 +445,30 @@ async function initDbPool() {
     // ignore if table missing or already converted
   }
 
-  // Recreate Customer table (drop existing then create fresh)
+  // Recreate Customer table (drop existing then create fresh).
+  // SQL file note: create_customers_table.sql 包含建表与手机号索引语句，适合放在这里执行。
   try {
     await pool.query("DROP TABLE IF EXISTS \`Customer\`");
-    await pool.query(`
-      CREATE TABLE \`Customer\` (
-        \`id\` VARCHAR(80) NOT NULL PRIMARY KEY,
-        \`password\` VARCHAR(255) NOT NULL,
-        \`phone\` VARCHAR(32) DEFAULT NULL,
-        \`name\` VARCHAR(128) DEFAULT NULL,
-        \`email\` VARCHAR(128) DEFAULT NULL,
-        \`createdAt\` DATETIME DEFAULT CURRENT_TIMESTAMP,
-        \`updatedAt\` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-    `);
+    const customerSchemaPath = path.join(
+      __dirname,
+      "sql",
+      "create_customers_table.sql",
+    );
+    if (fs.existsSync(customerSchemaPath)) {
+      await runSqlFileStatements(customerSchemaPath, "customer schema init");
+    } else {
+      await pool.query(`
+        CREATE TABLE \`Customer\` (
+          \`id\` VARCHAR(80) NOT NULL PRIMARY KEY,
+          \`password\` VARCHAR(255) NOT NULL,
+          \`phone\` VARCHAR(32) DEFAULT NULL,
+          \`name\` VARCHAR(128) DEFAULT NULL,
+          \`email\` VARCHAR(128) DEFAULT NULL,
+          \`createdAt\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+          \`updatedAt\` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+      `);
+    }
   } catch (e) {
     // ignore
   }
@@ -503,21 +506,26 @@ async function initDbPool() {
   const hotelCount = Number(hotelCountRows?.[0]?.c || 0);
   if (hotelCount < 20) {
     const seedPath = path.join(__dirname, "sql", "seed_sample.sql");
-    if (fs.existsSync(seedPath)) {
-      const seedSql = fs.readFileSync(seedPath, "utf8");
-      const seedStmts = seedSql
-        .split(/;\s*\n/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      for (const s of seedStmts) {
-        try {
-          await pool.query(s);
-        } catch {
-          // ignore single seed statement errors
-        }
-      }
-    }
+    await runSqlFileStatements(seedPath, "seed sample");
+
+    // add_20_hotels_data.sql 注释说明为“新增20条酒店测试数据”，按初始化种子流程放在 seed_sample 之后。
+    // 使用同一条件块：首次初始化 Hotel_Base 通常为 0，会先灌基础样例，再尝试追加 20 条扩展样例。
+    const add20HotelsSeedPath = path.join(
+      __dirname,
+      "sql",
+      "add_20_hotels_data.sql",
+    );
+    await runSqlFileStatements(add20HotelsSeedPath, "seed additional 20 hotels");
   }
+
+  // migrate_add_room_fields.sql 注释说明为“向 Room 表添加缺失字段（安全执行，可重复运行）”。
+  // 按要求放在 seed_sample 之后执行；即使多次启动也应保持幂等。
+  const roomMigratePath = path.join(
+    __dirname,
+    "sql",
+    "migrate_add_room_fields.sql",
+  );
+  await runSqlFileStatements(roomMigratePath, "room field migration");
 }
 
 async function getHotelRelations(hotelIds) {
