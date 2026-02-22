@@ -382,7 +382,7 @@ export default function HotelDetail() {
             {rooms.length ? (
               [...rooms].sort((a, b) => (Number(a.price) || Number(a.current)) - (Number(b.price) || Number(b.current))).map((r) => {
 
-                const stockVal = r.stock ?? r.inventory ?? r.available ?? r.roomCount;
+                const stockVal = r.remain ?? r.stock ?? r.inventory ?? r.available ?? r.roomCount;
                 const stock = stockVal !== undefined ? Number(stockVal) : 10;
 
                 const dbStatus = String(r.status);
