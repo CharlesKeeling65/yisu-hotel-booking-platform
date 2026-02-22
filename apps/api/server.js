@@ -792,6 +792,10 @@ async function queryHotels(req) {
     }
   }
 
+  // 保存在添加 auditStatus/onlineStatus 之前的过滤条件，用于统计所有状态的计数（status-independent）
+  const whereBeforeStatus = [...where];
+  const paramsBeforeStatus = [...params];
+
   if (q.auditStatus !== undefined && q.auditStatus !== "") {
     where.push("a.audit_status = ?");
     params.push(parseIntSafe(q.auditStatus, 0));
@@ -902,17 +906,25 @@ async function queryHotels(req) {
   const offset = (page - 1) * pageSize;
   const paged = data.slice(offset, offset + pageSize);
 
-  // 统计在应用分页前的完整匹配集
+  // 统计：基于不包含 auditStatus/onlineStatus 的基础过滤条件，返回所有状态分布（与页面顶部计数需求一致）
+  const statSql = `SELECT
+      COUNT(*) AS total,
+      SUM(a.audit_status = 0) AS pending,
+      SUM(a.audit_status = 1 AND a.online_status = 0) AS approvedOffline,
+      SUM(a.audit_status = 1 AND a.online_status = 1) AS online,
+      SUM(a.audit_status = 2) AS rejected
+    FROM \`Hotel_Base\` b
+    LEFT JOIN \`Hotel_Audit\` a ON a.hotel_id = b.id
+    ${whereBeforeStatus.length ? `WHERE ${whereBeforeStatus.join(" AND ")}` : ""}`;
+
+  const [statRows] = await pool.query(statSql, paramsBeforeStatus);
+  const statRow = statRows && statRows[0] ? statRows[0] : { total: 0, pending: 0, approvedOffline: 0, online: 0, rejected: 0 };
   const stats = {
-    total: data.length,
-    pending: data.filter((h) => Number(h.audit_status) === 0).length,
-    approvedOffline: data.filter(
-      (h) => Number(h.audit_status) === 1 && Number(h.online_status) === 0,
-    ).length,
-    online: data.filter(
-      (h) => Number(h.audit_status) === 1 && Number(h.online_status) === 1,
-    ).length,
-    rejected: data.filter((h) => Number(h.audit_status) === 2).length,
+    total: Number(statRow.total || 0),
+    pending: Number(statRow.pending || 0),
+    approvedOffline: Number(statRow.approvedOffline || 0),
+    online: Number(statRow.online || 0),
+    rejected: Number(statRow.rejected || 0),
   };
 
   return {
