@@ -10,8 +10,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import FilterBottomSheet from "@/components/hotel/FilterBottomSheet";
-import { IconSymbol } from "@/components/ui/icon-symbol";
+import LocateQuickCard from "@/components/location/LocateQuickCard";
+import LocationSearchInputCard from "@/components/location/LocationSearchInputCard";
+import RegionSelectorCard from "@/components/location/RegionSelectorCard";
 import TopNavBar from "@/components/ui/top-nav-bar";
+import { fetchLocationSuggestions, type LocationSuggestion } from "@/lib/api";
 import {
     parseReverseGeocode,
     reverseGeocodeWithProvider,
@@ -22,23 +25,30 @@ import { setSearchSession } from "@/lib/search-session";
 const HOT_CITIES = ["扬州", "上海", "南京", "杭州"];
 const HOT_AREAS = ["外滩", "陆家嘴", "西湖", "新街口", "夫子庙", "瘦西湖"];
 const HISTORY_ITEMS = ["东关街", "万象城", "近地铁", "亲子房"];
-const SUGGESTIONS = [
-  { city: "上海", label: "外滩" },
-  { city: "上海", label: "陆家嘴" },
-  { city: "杭州", label: "西湖" },
-  { city: "南京", label: "新街口" },
-  { city: "南京", label: "夫子庙" },
-  { city: "扬州", label: "瘦西湖" },
-  { city: "扬州", label: "东关街" },
-];
 const REGION_URLS = [
   "https://fastly.jsdelivr.net/npm/china-area-data@5.0.0/pcaa.json",
   "https://cdn.jsdelivr.net/npm/china-area-data@5.0.0/pcaa.json",
   "https://unpkg.com/china-area-data@5.0.0/pcaa.json",
 ];
+const MUNICIPALITY_PREFIXES = new Set(["11", "12", "31", "50"]);
 
 type RegionNode = { code: string; name: string; children?: RegionNode[] };
 type RegionLevel = "province" | "city" | "county";
+
+function normalizeCityLevelLabelForMunicipality(
+  provinceCode: string,
+  provinceName: string,
+  cityName: string,
+) {
+  const normalizedCityName = stripCityCountySuffix(cityName || "");
+  if (
+    MUNICIPALITY_PREFIXES.has(String(provinceCode || "").slice(0, 2)) &&
+    ["市辖区", "县"].includes(String(cityName || "").trim())
+  ) {
+    return stripCityCountySuffix(provinceName || "") || normalizedCityName;
+  }
+  return normalizedCityName;
+}
 
 const FALLBACK_REGION_TREE: RegionNode[] = [
   {
@@ -117,7 +127,11 @@ function parsePcaaToTree(raw: unknown): RegionNode[] {
         .sort((a, b) => Number(a) - Number(b));
       return {
         code: cCode,
-        name: stripCityCountySuffix(cityMap[cCode] || ""),
+        name: normalizeCityLevelLabelForMunicipality(
+          pCode,
+          provinceMap[pCode] || "",
+          cityMap[cCode] || "",
+        ),
         children: countyCodes.map((dCode) => ({
           code: dCode,
           name: countyMap[dCode] || "",
@@ -153,7 +167,11 @@ function parsePcaaObjectToTree(raw: unknown): RegionNode[] {
       );
       return {
         code: cCode,
-        name: stripCityCountySuffix(cityMap[cCode] || ""),
+        name: normalizeCityLevelLabelForMunicipality(
+          pCode,
+          provinces[pCode] || "",
+          cityMap[cCode] || "",
+        ),
         children: countyCodes.map((dCode) => ({
           code: dCode,
           name: countyMap[dCode] || "",
@@ -232,11 +250,12 @@ export default function LocationScreen() {
 
   const [keyword, setKeyword] = useState("");
   const [historyItems, setHistoryItems] = useState(HISTORY_ITEMS);
+  const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [locatedCity, setLocatedCity] = useState("");
   const [locatedDetail, setLocatedDetail] = useState("");
-  const [locatedRawText, setLocatedRawText] = useState("");
 
   const [regionTree, setRegionTree] = useState<RegionNode[]>([]);
   const [regionLoading, setRegionLoading] = useState(true);
@@ -308,6 +327,9 @@ export default function LocationScreen() {
   const selectedProvince = provinceOptions.find((x) => x.code === provinceCode);
   const selectedCity = cityOptions.find((x) => x.code === cityCode);
   const selectedCounty = countyOptions.find((x) => x.code === countyCode);
+  const selectedReturnCity = stripCityCountySuffix(
+    selectedCounty?.name || selectedCity?.name || String(city || ""),
+  );
 
   const handleBack = () => {
     // 若已选择省市，返回时直接带回所选城市，避免“看起来选了但返回仍是旧值”。
@@ -382,26 +404,30 @@ export default function LocationScreen() {
           provider,
           coords: pos.coords,
           reverse: info,
+          normalized: via.normalized,
         });
       const parsed = parseReverseGeocode(info?.[0]);
+      const normalized = via.normalized || {};
       if (__DEV__) console.log("[location-page-locate:parsed]", parsed);
-      if (!info?.[0]) {
+      const nextCity = stripCityCountySuffix(
+        String(normalized.cityOrCounty || parsed.cityOrCounty || ""),
+      );
+      const nextStreet = String(normalized.street || parsed.detailText || "").trim();
+
+      if (!nextCity) {
         setErrorText(
           "已获取坐标，但未获取到地址（Web/模拟器常见）。可用省市县下拉或手动输入。",
         );
         setLocatedCity("");
-        setLocatedDetail(
-          `经度 ${pos.coords.longitude.toFixed(6)} · 纬度 ${pos.coords.latitude.toFixed(6)}`,
-        );
+        setLocatedDetail("");
       } else {
-        setLocatedCity(parsed.cityOrCounty || "");
-        setLocatedDetail(parsed.detailText || "");
+        setLocatedCity(nextCity);
+        setLocatedDetail(nextStreet);
       }
-      setLocatedRawText(
-        JSON.stringify({ coords: pos.coords, reverse: info }, null, 2),
-      );
     } catch {
       setErrorText("定位失败，请重试");
+      setLocatedCity("");
+      setLocatedDetail("");
     } finally {
       setLocating(false);
     }
@@ -427,10 +453,88 @@ export default function LocationScreen() {
     navigateWithSelection(selectedCityName, selectedLocation);
   };
 
-  const suggestions = useMemo(() => {
-    if (!keyword.trim()) return [];
-    return SUGGESTIONS.filter((item) => item.label.includes(keyword.trim()));
-  }, [keyword]);
+  const localSuggestionFallback = useMemo(() => {
+    const q = keyword.trim();
+    if (!q) return [] as LocationSuggestion[];
+    const qLower = q.toLowerCase();
+    const seen = new Set<string>();
+    const out: LocationSuggestion[] = [];
+
+    const push = (item: LocationSuggestion) => {
+      const cityName = stripCityCountySuffix(item.city || "");
+      const label = String(item.label || "").trim();
+      if (!label) return;
+      const key = `${item.type}|${cityName}|${label}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ ...item, city: cityName });
+    };
+
+    for (const c of HOT_CITIES) {
+      if (c.toLowerCase().includes(qLower)) {
+        push({ type: "city", city: c, label: stripCityCountySuffix(c) });
+      }
+    }
+    for (const area of HOT_AREAS) {
+      if (area.toLowerCase().includes(qLower)) {
+        push({
+          type: "scenic",
+          city: selectedReturnCity || stripCityCountySuffix(String(city || "上海")),
+          label: area,
+        });
+      }
+    }
+    for (const p of regionTree) {
+      for (const c of p.children || []) {
+        const cityName = stripCityCountySuffix(c.name);
+        if (cityName.toLowerCase().includes(qLower)) {
+          push({ type: "city", city: cityName, label: cityName });
+        }
+        for (const d of c.children || []) {
+          const countyName = stripCityCountySuffix(d.name);
+          if (countyName.toLowerCase().includes(qLower)) {
+            push({ type: "area", city: cityName, label: countyName });
+          }
+        }
+      }
+      if (out.length >= 12) break;
+    }
+
+    return out.slice(0, 12);
+  }, [keyword, regionTree, selectedReturnCity, city]);
+
+  useEffect(() => {
+    const q = keyword.trim();
+    if (!q) {
+      setSuggestions([]);
+      setSuggestionsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setSuggestionsLoading(true);
+      try {
+        const list = await fetchLocationSuggestions({
+          q,
+          city: selectedReturnCity || stripCityCountySuffix(String(city || "")),
+          limit: 12,
+        });
+        if (cancelled) return;
+        setSuggestions(list);
+      } catch {
+        if (cancelled) return;
+        setSuggestions(localSuggestionFallback);
+      } finally {
+        if (!cancelled) setSuggestionsLoading(false);
+      }
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [keyword, city, selectedReturnCity, localSuggestionFallback]);
 
   const activeOptions =
     activeLevel === "province"
@@ -449,144 +553,53 @@ export default function LocationScreen() {
     <View className="flex-1 bg-white">
       <TopNavBar title="地点选择 / 定位" onBack={handleBack} />
       <View className="px-4">
-        <View className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-          <TextInput
-            ref={inputRef}
-            value={keyword}
-            onChangeText={setKeyword}
-            className="text-base text-slate-900"
-            placeholder="位置/商圈/酒店"
-            placeholderTextColor="#C0C4CC"
-            returnKeyType="search"
-            autoFocus
-            onSubmitEditing={handleSubmit}
-          />
-        </View>
+        <LocateQuickCard
+          locating={locating}
+          errorText={errorText}
+          locatedCity={locatedCity}
+          locatedDetail={locatedDetail}
+          onLocate={handleLocate}
+          onSelectCity={() => handleSelect(locatedCity, "")}
+          onSelectStreet={() => handleSelect(locatedCity, locatedDetail)}
+        />
 
-        <View className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-          <Text className="text-xs text-slate-500">
-            行政区选择（省、市必填，县/区可选）
-          </Text>
-          <View className="mt-2 flex-row items-center gap-2">
-            <Pressable
-              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2"
-              onPress={() => setActiveLevel("province")}
-            >
-              <Text
-                numberOfLines={1}
-                className={`text-sm ${selectedProvince ? "text-slate-700" : "text-slate-400"}`}
-              >
-                {selectedProvince?.name || "请选择省"}
-              </Text>
-            </Pressable>
-            <Pressable
-              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2"
-              onPress={() => setActiveLevel("city")}
-              disabled={!provinceCode}
-            >
-              <Text
-                numberOfLines={1}
-                className={`text-sm ${selectedCity ? "text-slate-700" : "text-slate-400"}`}
-              >
-                {selectedCity?.name || "请选择市"}
-              </Text>
-            </Pressable>
-            <Pressable
-              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2"
-              onPress={() => setActiveLevel("county")}
-              disabled={!cityCode}
-            >
-              <Text
-                numberOfLines={1}
-                className={`text-sm ${selectedCounty ? "text-slate-700" : "text-slate-400"}`}
-              >
-                {selectedCounty?.name || "县/区(可选)"}
-              </Text>
-            </Pressable>
-          </View>
-          <View className="mt-3 flex-row items-center gap-3">
-            <Pressable
-              disabled={!provinceCode || !cityCode}
-              className={`flex-1 rounded-xl py-2.5 ${provinceCode && cityCode ? "bg-[#1890FF]" : "bg-slate-200"}`}
-              onPress={() => {
-                const target = stripCityCountySuffix(
-                  selectedCounty?.name || selectedCity?.name || "",
-                );
-                if (!target) return;
-                handleSelect(target, "");
-              }}
-            >
-              <Text className="text-center text-sm font-semibold text-white">
-                仅返回市/县名
-              </Text>
-            </Pressable>
-          </View>
-        </View>
+        <LocationSearchInputCard
+          inputRef={inputRef}
+          keyword={keyword}
+          onChangeKeyword={setKeyword}
+          onSubmit={() => handleSubmit()}
+        />
 
-        <View className="mt-4 flex-row items-center justify-between">
-          <Text className="text-sm text-slate-500">定位当前城市</Text>
-          <Pressable
-            disabled={locating}
-            onPress={handleLocate}
-            className={`h-9 w-9 items-center justify-center rounded-full ${locating ? "bg-[#D7E9FB]" : "bg-[#E6F4FF]"}`}
-          >
-            <IconSymbol size={18} name="location.fill" color="#1890FF" />
-          </Pressable>
-        </View>
-        {errorText ? (
-          <Text className="mt-2 text-xs text-red-500">{errorText}</Text>
-        ) : null}
-
-        {locatedCity ? (
-          <View className="mt-2 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-            <Text className="text-xs text-slate-500">
-              当前定位结果（可直接返回）
-            </Text>
-            <View className="mt-2 gap-2">
-              <Pressable
-                onPress={() => handleSelect(locatedCity, "")}
-                className="rounded-xl border border-[#D8E8FA] bg-white px-3 py-2"
-              >
-                <Text className="text-sm font-semibold text-slate-700">
-                  {locatedCity}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() =>
-                  handleSelect(locatedCity, locatedDetail || locatedCity)
-                }
-                className="rounded-xl border border-[#D8E8FA] bg-white px-3 py-2"
-              >
-                <Text className="text-sm text-slate-700">
-                  {locatedDetail
-                    ? `${locatedCity} ${locatedDetail}`
-                    : locatedCity}
-                </Text>
-              </Pressable>
-            </View>
-            {__DEV__ && locatedRawText ? (
-              <View className="mt-3 rounded-xl bg-white px-2.5 py-2">
-                <Text className="text-[11px] text-slate-400">
-                  定位原始返回（调试）
-                </Text>
-                <Text className="mt-1 text-[11px] text-slate-500">
-                  {locatedRawText}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
+        <RegionSelectorCard
+          selectedProvinceName={selectedProvince?.name}
+          selectedCityName={selectedCity?.name}
+          selectedCountyName={selectedCounty?.name}
+          provinceCode={provinceCode}
+          cityCode={cityCode}
+          onOpenProvince={() => setActiveLevel("province")}
+          onOpenCity={() => setActiveLevel("city")}
+          onOpenCounty={() => setActiveLevel("county")}
+          onConfirmCityOrCounty={() => {
+            const target = stripCityCountySuffix(
+              selectedCounty?.name || selectedCity?.name || "",
+            );
+            if (!target) return;
+            handleSelect(target, "");
+          }}
+        />
 
         {keyword.trim().length > 0 ? (
           <>
             <Text className="mt-6 text-sm text-slate-500">输入联想</Text>
             <View className="mt-3">
               {suggestions.length === 0 ? (
-                <Text className="text-xs text-slate-400">暂无匹配结果</Text>
+                <Text className="text-xs text-slate-400">
+                  {suggestionsLoading ? "搜索中..." : "暂无匹配结果"}
+                </Text>
               ) : (
                 suggestions.map((item) => (
                   <Pressable
-                    key={`${item.city}-${item.label}`}
+                    key={`${item.type}-${item.city}-${item.label}`}
                     onPress={() =>
                       handleSelect(stripCityCountySuffix(item.city), item.label)
                     }
@@ -597,6 +610,15 @@ export default function LocationScreen() {
                       <Text className="text-xs text-slate-400">
                         {" "}
                         · {item.city}
+                        {item.type === "hotel"
+                          ? " · 酒店"
+                          : item.type === "scenic"
+                            ? " · 景点/商圈"
+                            : item.type === "area"
+                              ? " · 区县"
+                              : item.type === "city"
+                                ? " · 城市"
+                                : ""}
                       </Text>
                     </Text>
                   </Pressable>

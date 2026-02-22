@@ -13,6 +13,16 @@ export type ParsedLocationParts = {
 export type ReverseLookupResult = {
   provider: string;
   reverse: Partial<LocationGeocodedAddress>[];
+  normalized?: {
+    provider?: string;
+    province?: string;
+    city?: string;
+    district?: string;
+    cityOrCounty?: string;
+    street?: string;
+    displayText?: string;
+    hasResult?: boolean;
+  };
 };
 
 export function stripCityCountySuffix(input: string) {
@@ -28,7 +38,17 @@ export function parseReverseGeocode(addr?: Partial<LocationGeocodedAddress> | nu
   const cityOrCounty = stripCityCountySuffix(cityOrCountyRaw);
 
   // 关键词输入框优先仅使用道路名（OSM 的 road）。
-  const detailText = String(addr?.street || "").trim();
+  const rawStreet = String(addr?.street || "").trim();
+  const streetNorm = stripCityCountySuffix(rawStreet);
+  const districtNorm = stripCityCountySuffix(district);
+  const cityNorm = stripCityCountySuffix(city);
+  const detailText =
+    !rawStreet ||
+    streetNorm === cityOrCounty ||
+    streetNorm === districtNorm ||
+    streetNorm === cityNorm
+      ? ""
+      : rawStreet;
   const fullText = [cityOrCounty, detailText].filter(Boolean).join(" ");
 
   return {
@@ -44,10 +64,11 @@ export function parseReverseGeocode(addr?: Partial<LocationGeocodedAddress> | nu
 export async function reverseGeocodeWithProvider(latitude: number, longitude: number): Promise<ReverseLookupResult> {
   try {
     const data = await fetchReverseGeocode(latitude, longitude);
-    if (data?.reverse?.length) {
+    if (data?.reverse?.length || data?.normalized) {
       return {
         provider: data.provider || "none",
         reverse: (data.reverse || []) as Partial<LocationGeocodedAddress>[],
+        normalized: data.normalized,
       };
     }
   } catch {
