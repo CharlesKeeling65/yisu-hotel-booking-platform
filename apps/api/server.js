@@ -178,6 +178,16 @@ function diffNightsSafe(checkIn, checkOut) {
   return Math.max(1, days);
 }
 
+function toDateOnly(value) {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(d.getTime())) return null;
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function sha256(input) {
   return crypto
     .createHash("sha256")
@@ -1959,8 +1969,8 @@ function mapMobileOrderRow(row) {
     refunded: "已退款",
   };
 
-  const checkIn = row.check_in ? String(row.check_in).slice(0, 10) : null;
-  const checkOut = row.check_out ? String(row.check_out).slice(0, 10) : null;
+  const checkIn = toDateOnly(row.check_in);
+  const checkOut = toDateOnly(row.check_out);
   const nights = Number(row.nights || diffNightsSafe(checkIn, checkOut));
 
   return {

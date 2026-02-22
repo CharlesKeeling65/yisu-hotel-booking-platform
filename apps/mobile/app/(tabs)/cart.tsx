@@ -33,7 +33,7 @@ const STATUS_TABS: Array<{ key: StatusKey; label: string }> = [
 function OrderCard({ order }: { order: MobileOrder }) {
   const dateText =
     order.checkIn && order.checkOut
-      ? `${order.checkIn} 至 ${order.checkOut}`
+      ? `${order.checkIn}至${order.checkOut}`
       : "";
   const metaText = `${order.nights || 1}晚${order.roomsCount || 1}间${
     order.roomName ? ` · ${order.roomName}` : ""
