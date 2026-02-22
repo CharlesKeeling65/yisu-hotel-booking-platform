@@ -1,22 +1,404 @@
-body{font-family:"Microsoft YaHei",sans-serif;background:#f5f7fa;margin:0;padding:0}
-.card{max-width:980px;margin:20px auto;background:#fff;padding:18px;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,0.06)}
-h2{margin-bottom:12px}
-.list{display:flex;flex-direction:column;gap:12px}
-.row{display:flex;gap:12px;align-items:center;padding:10px;border:1px solid #eee;border-radius:6px}
-.row.highlight{background:rgba(64,158,255,0.06);box-shadow:inset 0 0 0 2px rgba(64,158,255,0.06)}
-.thumb{width:160px;aspect-ratio:16/9;background:#fafafa;border:1px solid #e6e6e6;border-radius:6px;display:grid;place-items:center;overflow:hidden}
-.thumb img{width:100%;height:100%;object-fit:cover}
-.meta{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.meta input,.meta select{padding:8px;border:1px solid #ddd;border-radius:4px}
-.ops{display:flex;flex-direction:column;gap:6px}
-.ops{position:relative;z-index:1}
-.btn{padding:8px 12px;border-radius:6px;border:none;cursor:pointer}
-.btn.primary{background:#409eff;color:#fff}
-.btn.warn{background:#f56c6c;color:#fff}
-.actions{display:flex;gap:8px}
-.small{font-size:12px;color:#888}
-.toolbar{display:flex;gap:8px;margin-bottom:12px;align-items:center}
-.back-link{color:#409eff;cursor:pointer}
-.thumb-text{color:#999}
-.saveRow{background:#409eff;color:#fff}
-.imgInput{font-size:12px}
+.rooms-container {
+  max-width: 1400px;
+  margin: 32px auto;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color: #0f294d;
+}
+
+/* ================= 1. 顶部标题与工具栏 ================= */
+.rooms-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 24px;
+  padding: 0 10px;
+}
+
+.rooms-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.rooms-header .subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: #8592a6;
+}
+
+.toolbar {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-tool {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-tool.back {
+  background: #fff;
+  border: 1px solid #d5e3ed;
+  color: #47586e;
+}
+
+.btn-tool.back:hover {
+  background: #f4f7f9;
+}
+
+.btn-tool.primary {
+  background: #1d8fff;
+  color: #fff;
+}
+
+.btn-tool.primary:hover {
+  background: #0076d6;
+}
+
+.btn-tool.success {
+  background: #047857;
+  color: #fff;
+}
+
+.btn-tool.success:hover {
+  background: #065f46;
+}
+
+.btn-tool.warn {
+  background: #fff;
+  border: 1px solid #fca5a5;
+  color: #ef4444;
+}
+
+.btn-tool.warn:hover {
+  background: #fef2f2;
+}
+
+/* ================= 2. 房型列表与卡片 ================= */
+.rooms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.room-card {
+  display: flex;
+  gap: 24px;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  border: 1px solid transparent;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.room-card.highlight {
+  border-color: #1d8fff;
+  box-shadow: 0 0 0 4px rgba(29, 143, 255, 0.1);
+}
+
+/* 左侧图片区域 */
+.room-thumb-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #f4f7f9;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e2e8f0;
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumb-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #94a3b8;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.upload-btn {
+  text-align: center;
+  font-size: 13px;
+  color: #1d8fff;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  background: #f0f7ff;
+  transition: background 0.2s;
+}
+
+.upload-btn:hover {
+  background: #e0f0ff;
+}
+
+.upload-btn input {
+  display: none;
+}
+
+/* ================= 3. 输入框网格区 (Feature 7 底纹提示) ================= */
+.room-meta {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  align-content: start;
+}
+
+.input-wrap {
+  display: flex;
+  align-items: center;
+  background: #f8fafc;
+  /* 底纹背景色 */
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.input-wrap:focus-within {
+  background: #ffffff;
+  border-color: #1d8fff;
+}
+
+.input-wrap.full-width {
+  grid-column: 1 / -1;
+}
+
+.input-wrap .prefix {
+  padding: 0 12px;
+  font-size: 13px;
+  color: #64748b;
+  white-space: nowrap;
+  background: #f1f5f9;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid #e2e8f0;
+}
+
+.input-wrap input,
+.input-wrap select {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #0f294d;
+  outline: none;
+}
+
+.input-wrap input::placeholder {
+  color: #cbd5e1;
+}
+
+.input-wrap select {
+  cursor: pointer;
+  appearance: none;
+}
+
+/* ================= 4. 右侧单行操作按钮 ================= */
+.room-actions-bottom {
+  grid-column: 1 / -1;
+  /* 占据整行 */
+  display: flex;
+  justify-content: flex-end;
+  /* 按钮靠右 */
+  gap: 12px;
+  margin-top: 4px;
+}
+
+/* 按钮改为横向排列样式 */
+.room-actions-bottom .action-btn {
+  padding: 8px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.2s;
+}
+
+.action-btn:hover {
+  opacity: 0.85;
+}
+
+.action-btn.save {
+  background: #1d8fff;
+  color: #fff;
+}
+
+.action-btn.delete {
+  background: #fff;
+  border: 1px solid #fee2e2;
+  color: #ef4444;
+}
+
+/* 空状态 */
+.empty-state {
+  text-align: center;
+  padding: 60px 0;
+  background: #fff;
+  border-radius: 12px;
+  color: #64748b;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+/* ================= 5. Feature 8: 自定义全局组件 ================= */
+/* Toast 提示框 */
+.custom-toast {
+  position: fixed;
+  top: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  z-index: 9999;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  animation: slideDown 0.3s ease-out forwards;
+}
+
+.custom-toast.success {
+  background: #10b981;
+}
+
+.custom-toast.error {
+  background: #ef4444;
+}
+
+@keyframes slideDown {
+  from {
+    top: -20px;
+    opacity: 0;
+  }
+
+  to {
+    top: 32px;
+    opacity: 1;
+  }
+}
+
+/* Modal 确认框 (已大幅度扩宽放大) */
+.custom-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 41, 77, 0.5);
+  /* 遮罩加深一点点，突出前面的大弹窗 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9998;
+  backdrop-filter: blur(3px);
+}
+
+.custom-modal {
+  background: #fff;
+  width: 540px;
+  /* 【放大】：从原来的 400px/480px 扩宽到了 540px */
+  padding: 32px 36px;
+  /* 【放大】：内部空间更加宽裕 */
+  border-radius: 16px;
+  /* 【放大】：圆角更润滑 */
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.2);
+  animation: popIn 0.2s ease-out forwards;
+}
+
+.custom-modal h3 {
+  margin: 0 0 16px 0;
+  font-size: 20px;
+  /* 【放大】：标题字号升级 */
+  color: #0f294d;
+}
+
+.custom-modal p {
+  margin: 0 0 28px 0;
+  font-size: 15px;
+  /* 【放大】：提示文本更易读 */
+  color: #47586e;
+  line-height: 1.6;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.btn-modal {
+  padding: 10px 24px;
+  /* 【放大】：按钮体积变大，更好点击 */
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btn-modal.cancel {
+  background: #f1f5f9;
+  color: #47586e;
+}
+
+.btn-modal.cancel:hover {
+  background: #e2e8f0;
+}
+
+.btn-modal.confirm {
+  background: #1d8fff;
+  color: #fff;
+}
+
+.btn-modal.confirm:hover {
+  background: #0076d6;
+}
+
+@keyframes popIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
