@@ -152,3 +152,86 @@ export async function fetchReverseGeocode(lat: number, lon: number) {
   );
   return res.data ?? { provider: "none", reverse: [] };
 }
+
+export type MobileOrder = {
+  id: string;
+  customerId: string;
+  hotelId: string;
+  roomId: string;
+  status: string;
+  statusLabel: string;
+  paymentStatus: string;
+  paymentStatusLabel: string;
+  checkIn: string | null;
+  checkOut: string | null;
+  nights: number;
+  roomsCount: number;
+  adultsCount: number;
+  childrenCount: number;
+  guestName: string;
+  guestPhone: string;
+  priceSubtotal: number;
+  couponAmount: number;
+  payableAmount: number;
+  currency: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  hotelName: string;
+  hotelCity: string;
+  hotelCounty: string;
+  hotelAddress: string;
+  roomName: string;
+};
+
+export type CreateOrderPayload = {
+  customerId: string;
+  hotelId: string;
+  roomId: string;
+  checkIn: string;
+  checkOut: string;
+  nights?: number;
+  roomsCount: number;
+  adultsCount: number;
+  childrenCount: number;
+  guestName: string;
+  guestPhone: string;
+  priceSubtotal: number;
+  couponAmount: number;
+  payableAmount: number;
+  currency?: string;
+  paymentMethod?: string;
+  notes?: string;
+};
+
+export async function createMobileOrder(payload: CreateOrderPayload) {
+  const res = await getJson<MobileOrder>(`/api/mobile/orders`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return res.data ?? null;
+}
+
+export async function fetchMobileOrders(params: {
+  customerId: string;
+  status?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  const search = new URLSearchParams();
+  search.set("customerId", params.customerId);
+  if (params.status) search.set("status", params.status);
+  if (params.page) search.set("page", String(params.page));
+  if (params.pageSize) search.set("pageSize", String(params.pageSize));
+
+  const res = await getJson<MobileOrder[]>(
+    `/api/mobile/orders?${search.toString()}`,
+  );
+  return {
+    list: res.data ?? [],
+    page: res.page ?? 1,
+    pageSize: res.pageSize ?? 10,
+    total: res.total ?? 0,
+    hasMore: Boolean(res.hasMore),
+  };
+}

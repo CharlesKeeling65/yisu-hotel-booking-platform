@@ -1,16 +1,18 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    Alert,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fetchMobileHotelById } from "@/lib/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import { createMobileOrder, fetchMobileHotelById } from "@/lib/api";
 import type { Hotel, Room } from "@yisu/shared";
 
 function toCnDate(s: string) {
@@ -49,6 +51,7 @@ export default function BookingScreen() {
 
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
+  const [phoneError, setPhoneError] = useState("");
 
   const roomCount = Math.max(1, Number(rooms || 1));
   const adultCount = Math.max(roomCount, Number(adults || 1));
@@ -91,7 +94,7 @@ export default function BookingScreen() {
   const coupon = roomTotal >= 200 ? 26 : 0;
   const payable = Math.max(0, roomTotal - coupon);
 
-  const handlePay = () => {
+  const handlePay = async () => {
     if (!room || !hotel) {
       Alert.alert("无法支付", "房型信息缺失，请返回重试。");
       return;
@@ -105,26 +108,70 @@ export default function BookingScreen() {
       return;
     }
     // 简单手机号格式校验（中国手机号 11 位）
+    setPhoneError("");
     const onlyDigits = guestPhone.replace(/\D/g, "");
     if (onlyDigits.length < 7) {
-      Alert.alert("手机号格式错误", "请输入有效的手机号");
+      setPhoneError("手机号格式错误，请输入有效手机号");
       return;
     }
 
-    Alert.alert(
-      "已提交预订",
-      `模拟下单成功\n\n预订人：${guestName}\n联系方式：${guestPhone}`,
-      [
+    let customerId = "";
+    try {
+      const info = await AsyncStorage.getItem("customer_info");
+      if (info) {
+        const parsed = JSON.parse(info);
+        customerId = String(parsed.id || "");
+      }
+    } catch {
+      // ignore storage error
+    }
+
+    if (!customerId) {
+      Alert.alert("请先登录", "登录后才能查看和管理订单", [
         {
-          text: "查看酒店",
-          onPress: () => router.back(),
+          text: "去登录",
+          onPress: () => router.push("/login"),
         },
-        {
-          text: "完成",
-          style: "default",
-        },
-      ],
-    );
+        { text: "取消", style: "cancel" },
+      ]);
+      return;
+    }
+
+    try {
+      const order = await createMobileOrder({
+        customerId,
+        hotelId: String(hotel.id),
+        roomId: String(room.id),
+        checkIn: String(checkIn),
+        checkOut: String(checkOut),
+        nights,
+        roomsCount: roomCount,
+        adultsCount: adultCount,
+        childrenCount: childCount,
+        guestName: guestName.trim(),
+        guestPhone: guestPhone.trim(),
+        priceSubtotal: roomTotal,
+        couponAmount: coupon,
+        payableAmount: payable,
+      });
+
+      if (!order) {
+        throw new Error("创建订单失败，请稍后重试");
+      }
+
+      Alert.alert(
+        "预订成功",
+        `订单已生成，可在“订单”页查看。\n\n预订人：${guestName}\n联系方式：${guestPhone}`,
+        [
+          {
+            text: "知道了",
+            onPress: () => router.replace("/(tabs)/cart"),
+          },
+        ],
+      );
+    } catch (e: any) {
+      Alert.alert("下单失败", e?.message || String(e));
+    }
   };
 
   const renderContent = () => {
@@ -250,11 +297,19 @@ export default function BookingScreen() {
                 <Text className="text-sm text-neutral-700">联系方式</Text>
                 <TextInput
                   value={guestPhone}
-                  onChangeText={setGuestPhone}
+                  onChangeText={(text) => {
+                    setGuestPhone(text);
+                    if (phoneError) setPhoneError("");
+                  }}
                   placeholder="手机号"
                   keyboardType="phone-pad"
                   className="mt-2 rounded-md border border-neutral-200 bg-white px-3 py-2"
                 />
+                {phoneError ? (
+                  <Text className="mt-1 text-xs text-red-500">
+                    {phoneError}
+                  </Text>
+                ) : null}
               </View>
 
               <Text className="mt-3 text-sm text-neutral-700">
@@ -296,6 +351,13 @@ export default function BookingScreen() {
     );
   };
 
+  const canPay =
+    !loading &&
+    !!hotel &&
+    !!room &&
+    guestName.trim().length > 0 &&
+    guestPhone.trim().length > 0;
+
   return (
     <View className="flex-1 bg-neutral-50">
       <View
@@ -328,33 +390,15 @@ export default function BookingScreen() {
           </Text>
         </View>
         <Pressable
-          disabled={
-            loading ||
-            !hotel ||
-            !room ||
-            !guestName.trim() ||
-            !guestPhone.trim()
-          }
+          disabled={!canPay}
           onPress={handlePay}
           className={`rounded-xl px-5 py-3 ${
-            loading ||
-            !hotel ||
-            !room ||
-            !guestName.trim() ||
-            !guestPhone.trim()
-              ? "bg-slate-200"
-              : "bg-[#2B7FC7]"
+            canPay ? "bg-[#2B7FC7]" : "bg-slate-200"
           }`}
         >
           <Text
             className={`text-base font-semibold ${
-              loading ||
-              !hotel ||
-              !room ||
-              !guestName.trim() ||
-              !guestPhone.trim()
-                ? "text-slate-500"
-                : "text-white"
+              canPay ? "text-white" : "text-slate-500"
             }`}
           >
             去支付

@@ -170,6 +170,14 @@ function parseFloatSafe(v, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function diffNightsSafe(checkIn, checkOut) {
+  const start = new Date(String(checkIn || "").slice(0, 10)).getTime();
+  const end = new Date(String(checkOut || "").slice(0, 10)).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 1;
+  const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+  return Math.max(1, days);
+}
+
 function sha256(input) {
   return crypto
     .createHash("sha256")
@@ -323,7 +331,7 @@ async function initDbPool() {
   });
   try {
     await tmpConn.query(
-      `CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci`,
+      `CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
     );
   } finally {
     await tmpConn.end();
@@ -354,6 +362,46 @@ async function initDbPool() {
         // ignore single statement errors for compatibility
       }
     }
+  }
+
+  // Ensure orders table exists for mobile booking flow
+  const ordersSchemaPath = path.join(
+    __dirname,
+    "sql",
+    "create_orders_table.sql",
+  );
+  if (fs.existsSync(ordersSchemaPath)) {
+    const sql = fs.readFileSync(ordersSchemaPath, "utf8");
+    const stmts = sql
+      .split(/;\s*\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const s of stmts) {
+      try {
+        await pool.query(s);
+      } catch {
+        // ignore errors when indexes or tables already exist
+      }
+    }
+  }
+
+  // Best-effort lightweight migration for orders table to ensure new columns exist
+  try {
+    // 添加 customer_id 兼容字段（如果已存在会抛错，忽略即可）
+    await pool.query(
+      "ALTER TABLE `orders` ADD COLUMN `customer_id` VARCHAR(64) NULL COMMENT '下单客户ID，对应 Customer.id' AFTER `id`",
+    );
+  } catch (_e) {
+    // ignore when column already exists or table missing
+  }
+
+  // Align orders table collation with main schema to avoid collation mix errors
+  try {
+    await pool.query(
+      "ALTER TABLE `orders` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+    );
+  } catch (_e) {
+    // ignore if table missing or already converted
   }
 
   // Recreate Customer table (drop existing then create fresh)
@@ -1894,6 +1942,190 @@ app.get("/api/mobile/hotels/:id", async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e.message });
+  }
+});
+
+function mapMobileOrderRow(row) {
+  const statusTextMap = {
+    pending: "待付款",
+    upcoming: "未出行",
+    completed: "已完成",
+    reviewing: "待点评",
+    cancelled: "已取消",
+  };
+  const payStatusTextMap = {
+    unpaid: "未支付",
+    paid: "已支付",
+    refunded: "已退款",
+  };
+
+  const checkIn = row.check_in ? String(row.check_in).slice(0, 10) : null;
+  const checkOut = row.check_out ? String(row.check_out).slice(0, 10) : null;
+  const nights = Number(row.nights || diffNightsSafe(checkIn, checkOut));
+
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    hotelId: row.hotel_id,
+    roomId: row.room_id,
+    status: row.status,
+    statusLabel: statusTextMap[row.status] || row.status || "",
+    paymentStatus: row.payment_status,
+    paymentStatusLabel:
+      payStatusTextMap[row.payment_status] || row.payment_status || "",
+    checkIn,
+    checkOut,
+    nights,
+    roomsCount: Number(row.rooms_count || 1),
+    adultsCount: Number(row.adults_count || 1),
+    childrenCount: Number(row.children_count || 0),
+    guestName: row.guest_name,
+    guestPhone: row.guest_phone,
+    priceSubtotal: Number(row.price_subtotal || 0),
+    couponAmount: Number(row.coupon_amount || 0),
+    payableAmount: Number(row.payable_amount || 0),
+    currency: row.currency || "CNY",
+    notes: row.notes || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    hotelName: row.hotel_name || "",
+    hotelCity: row.hotel_city || "",
+    hotelCounty: row.hotel_county || "",
+    hotelAddress: row.hotel_address || "",
+    roomName: row.room_name || "",
+  };
+}
+
+app.post("/api/mobile/orders", async (req, res) => {
+  const p = req.body || {};
+  const customerId = String(p.customerId || "").trim();
+  if (!customerId)
+    return res.status(401).json({ code: 401, msg: "请先登录后再下单" });
+
+  if (
+    !hasRequiredFields(p, [
+      "hotelId",
+      "roomId",
+      "checkIn",
+      "checkOut",
+      "guestName",
+      "guestPhone",
+    ])
+  ) {
+    return res.status(400).json({
+      code: 400,
+      msg: "缺少必填字段：酒店、房型、入住离店与联系人信息",
+    });
+  }
+
+  const checkIn = String(p.checkIn).slice(0, 10);
+  const checkOut = String(p.checkOut).slice(0, 10);
+  const nights = p.nights
+    ? parseIntSafe(p.nights, 1)
+    : diffNightsSafe(checkIn, checkOut);
+  const roomsCount = parseIntSafe(p.roomsCount || p.rooms_count || 1, 1);
+  const adultsCount = parseIntSafe(
+    p.adultsCount || p.adults_count || roomsCount,
+    roomsCount,
+  );
+  const childrenCount = parseIntSafe(
+    p.childrenCount || p.children_count || 0,
+    0,
+  );
+  const priceSubtotal = parseFloatSafe(p.priceSubtotal ?? p.price_subtotal, 0);
+  const couponAmount = parseFloatSafe(p.couponAmount ?? p.coupon_amount, 0);
+  const payableAmount = parseFloatSafe(
+    p.payableAmount ?? p.payable_amount ?? priceSubtotal - couponAmount,
+    0,
+  );
+
+  const id = genId("order");
+  const now = formatDateForMySQL();
+
+  try {
+    const insertRow = {
+      id,
+      customer_id: customerId,
+      hotel_id: String(p.hotelId),
+      room_id: String(p.roomId),
+      check_in: checkIn,
+      check_out: checkOut,
+      nights,
+      rooms_count: roomsCount,
+      adults_count: adultsCount,
+      children_count: childrenCount,
+      guest_name: String(p.guestName || "").trim(),
+      guest_phone: String(p.guestPhone || "").trim(),
+      price_subtotal: priceSubtotal,
+      coupon_amount: couponAmount,
+      payable_amount: payableAmount,
+      currency: String(p.currency || "CNY"),
+      status: "pending",
+      payment_method: String(p.paymentMethod || "online"),
+      payment_status: "unpaid",
+      notes: String(p.notes || ""),
+      created_at: now,
+      updated_at: now,
+    };
+
+    await pool.query("INSERT INTO `orders` SET ?", [insertRow]);
+
+    const [rows] = await pool.query(
+      "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id WHERE o.id = ? LIMIT 1",
+      [id],
+    );
+
+    const orderRow = rows[0];
+    return res.json({ code: 200, data: mapMobileOrderRow(orderRow) });
+  } catch (e) {
+    return res.status(500).json({ code: 500, msg: e.message });
+  }
+});
+
+app.get("/api/mobile/orders", async (req, res) => {
+  const customerId = String(
+    req.query.customerId || req.query.customer_id || "",
+  ).trim();
+  if (!customerId)
+    return res
+      .status(401)
+      .json({ code: 401, msg: "缺少 customerId，请先登录" });
+
+  const page = parseIntSafe(req.query.page || 1, 1) || 1;
+  const pageSize = parseIntSafe(req.query.pageSize || 10, 10) || 10;
+  const status = String(req.query.status || "").trim();
+
+  const where = ["o.customer_id = ?"];
+  const params = [customerId];
+  if (status && status !== "all") {
+    where.push("o.status = ?");
+    params.push(status);
+  }
+  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const offset = (page - 1) * pageSize;
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name
+       FROM \`orders\` o
+       LEFT JOIN \`Hotel_Base\` h ON o.hotel_id = h.id
+       LEFT JOIN \`Room\` r ON o.room_id = r.id
+       ${whereSql}
+       ORDER BY o.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, pageSize, offset],
+    );
+
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) AS c FROM \`orders\` o ${whereSql}`,
+      params,
+    );
+    const total = Number(countRows?.[0]?.c || 0);
+    const data = rows.map((r) => mapMobileOrderRow(r));
+    const hasMore = offset + rows.length < total;
+    return res.json({ code: 200, data, page, pageSize, total, hasMore });
+  } catch (e) {
+    return res.status(500).json({ code: 500, msg: e.message });
   }
 });
 
