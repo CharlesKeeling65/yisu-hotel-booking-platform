@@ -11,9 +11,13 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import FilterBottomSheet from "@/components/hotel/FilterBottomSheet";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { parseReverseGeocode, reverseGeocodeWithProvider, stripCityCountySuffix } from "@/lib/location-utils";
-import { setSearchSession } from "@/lib/search-session";
 import TopNavBar from "@/components/ui/top-nav-bar";
+import {
+    parseReverseGeocode,
+    reverseGeocodeWithProvider,
+    stripCityCountySuffix,
+} from "@/lib/location-utils";
+import { setSearchSession } from "@/lib/search-session";
 
 const HOT_CITIES = ["扬州", "上海", "南京", "杭州"];
 const HOT_AREAS = ["外滩", "陆家嘴", "西湖", "新街口", "夫子庙", "瘦西湖"];
@@ -83,12 +87,26 @@ function toNameMap(raw: unknown): Record<string, string> {
 function parsePcaaToTree(raw: unknown): RegionNode[] {
   if (!Array.isArray(raw) || raw.length < 3) return [];
   const maps = raw.map(toNameMap);
-  const provinceMap = maps.find((m) => Object.keys(m).some((k) => /^\d{6}$/.test(k) && k.endsWith("0000"))) || {};
-  const cityMap = maps.find((m) => Object.keys(m).some((k) => /^\d{6}$/.test(k) && k.endsWith("00") && !k.endsWith("0000"))) || {};
-  const countyMap = maps.find((m) => Object.keys(m).some((k) => /^\d{6}$/.test(k) && !k.endsWith("00"))) || {};
-  if (!Object.keys(provinceMap).length || !Object.keys(cityMap).length) return [];
+  const provinceMap =
+    maps.find((m) =>
+      Object.keys(m).some((k) => /^\d{6}$/.test(k) && k.endsWith("0000")),
+    ) || {};
+  const cityMap =
+    maps.find((m) =>
+      Object.keys(m).some(
+        (k) => /^\d{6}$/.test(k) && k.endsWith("00") && !k.endsWith("0000"),
+      ),
+    ) || {};
+  const countyMap =
+    maps.find((m) =>
+      Object.keys(m).some((k) => /^\d{6}$/.test(k) && !k.endsWith("00")),
+    ) || {};
+  if (!Object.keys(provinceMap).length || !Object.keys(cityMap).length)
+    return [];
 
-  const provinceCodes = Object.keys(provinceMap).sort((a, b) => Number(a) - Number(b));
+  const provinceCodes = Object.keys(provinceMap).sort(
+    (a, b) => Number(a) - Number(b),
+  );
   return provinceCodes.map((pCode) => {
     const cityCodes = Object.keys(cityMap)
       .filter((cCode) => cCode.slice(0, 2) === pCode.slice(0, 2))
@@ -100,7 +118,10 @@ function parsePcaaToTree(raw: unknown): RegionNode[] {
       return {
         code: cCode,
         name: stripCityCountySuffix(cityMap[cCode] || ""),
-        children: countyCodes.map((dCode) => ({ code: dCode, name: countyMap[dCode] || "" })),
+        children: countyCodes.map((dCode) => ({
+          code: dCode,
+          name: countyMap[dCode] || "",
+        })),
       };
     });
     return {
@@ -116,18 +137,27 @@ function parsePcaaObjectToTree(raw: unknown): RegionNode[] {
   const obj = raw as Record<string, Record<string, string>>;
   const provinces = obj["86"];
   if (!provinces || typeof provinces !== "object") return [];
-  const provinceCodes = Object.keys(provinces).sort((a, b) => Number(a) - Number(b));
+  const provinceCodes = Object.keys(provinces).sort(
+    (a, b) => Number(a) - Number(b),
+  );
   return provinceCodes.map((pCode) => {
     const pName = stripCityCountySuffix(provinces[pCode] || "");
     const cityMap = obj[pCode] || {};
-    const cityCodes = Object.keys(cityMap).sort((a, b) => Number(a) - Number(b));
+    const cityCodes = Object.keys(cityMap).sort(
+      (a, b) => Number(a) - Number(b),
+    );
     const cityNodes: RegionNode[] = cityCodes.map((cCode) => {
       const countyMap = obj[cCode] || {};
-      const countyCodes = Object.keys(countyMap).sort((a, b) => Number(a) - Number(b));
+      const countyCodes = Object.keys(countyMap).sort(
+        (a, b) => Number(a) - Number(b),
+      );
       return {
         code: cCode,
         name: stripCityCountySuffix(cityMap[cCode] || ""),
-        children: countyCodes.map((dCode) => ({ code: dCode, name: countyMap[dCode] || "" })),
+        children: countyCodes.map((dCode) => ({
+          code: dCode,
+          name: countyMap[dCode] || "",
+        })),
       };
     });
     return { code: pCode, name: pName, children: cityNodes };
@@ -158,7 +188,9 @@ async function loadChinaRegionTree() {
       const res = await fetch(url);
       if (!res.ok) continue;
       const json = await res.json();
-      const tree = parsePcaaToTree(json).length ? parsePcaaToTree(json) : parsePcaaObjectToTree(json);
+      const tree = parsePcaaToTree(json).length
+        ? parsePcaaToTree(json)
+        : parsePcaaObjectToTree(json);
       if (tree.length) return tree;
     } catch {
       // ignore and try next URL
@@ -169,7 +201,20 @@ async function loadChinaRegionTree() {
 
 export default function LocationScreen() {
   const router = useRouter();
-  const { city, location, from, checkIn, checkOut, priceStar, tags, scenicSpots, sort, rooms, adults, children } = useLocalSearchParams<{
+  const {
+    city,
+    location,
+    from,
+    checkIn,
+    checkOut,
+    priceStar,
+    tags,
+    scenicSpots,
+    sort,
+    rooms,
+    adults,
+    children,
+  } = useLocalSearchParams<{
     city?: string;
     location?: string;
     from?: "home" | "list";
@@ -252,15 +297,23 @@ export default function LocationScreen() {
   }, [regionTree, city]);
 
   const provinceOptions = regionTree;
-  const cityOptions = useMemo(() => provinceOptions.find((x) => x.code === provinceCode)?.children || [], [provinceOptions, provinceCode]);
-  const countyOptions = useMemo(() => cityOptions.find((x) => x.code === cityCode)?.children || [], [cityOptions, cityCode]);
+  const cityOptions = useMemo(
+    () => provinceOptions.find((x) => x.code === provinceCode)?.children || [],
+    [provinceOptions, provinceCode],
+  );
+  const countyOptions = useMemo(
+    () => cityOptions.find((x) => x.code === cityCode)?.children || [],
+    [cityOptions, cityCode],
+  );
   const selectedProvince = provinceOptions.find((x) => x.code === provinceCode);
   const selectedCity = cityOptions.find((x) => x.code === cityCode);
   const selectedCounty = countyOptions.find((x) => x.code === countyCode);
 
   const handleBack = () => {
     // 若已选择省市，返回时直接带回所选城市，避免“看起来选了但返回仍是旧值”。
-    const chosen = stripCityCountySuffix(selectedCounty?.name || selectedCity?.name || "");
+    const chosen = stripCityCountySuffix(
+      selectedCounty?.name || selectedCity?.name || "",
+    );
     if (chosen) {
       navigateWithSelection(chosen, keyword.trim() || "");
       return;
@@ -318,21 +371,35 @@ export default function LocationScreen() {
         return;
       }
       const pos = await Location.getCurrentPositionAsync({});
-      const via = await reverseGeocodeWithProvider(pos.coords.latitude, pos.coords.longitude);
+      const via = await reverseGeocodeWithProvider(
+        pos.coords.latitude,
+        pos.coords.longitude,
+      );
       const provider = via.provider;
       const info = via.reverse as Location.LocationGeocodedAddress[];
-      if (__DEV__) console.log("[location-page-locate:raw]", { provider, coords: pos.coords, reverse: info });
+      if (__DEV__)
+        console.log("[location-page-locate:raw]", {
+          provider,
+          coords: pos.coords,
+          reverse: info,
+        });
       const parsed = parseReverseGeocode(info?.[0]);
       if (__DEV__) console.log("[location-page-locate:parsed]", parsed);
       if (!info?.[0]) {
-        setErrorText("已获取坐标，但未获取到地址（Web/模拟器常见）。可用省市县下拉或手动输入。");
+        setErrorText(
+          "已获取坐标，但未获取到地址（Web/模拟器常见）。可用省市县下拉或手动输入。",
+        );
         setLocatedCity("");
-        setLocatedDetail(`经度 ${pos.coords.longitude.toFixed(6)} · 纬度 ${pos.coords.latitude.toFixed(6)}`);
+        setLocatedDetail(
+          `经度 ${pos.coords.longitude.toFixed(6)} · 纬度 ${pos.coords.latitude.toFixed(6)}`,
+        );
       } else {
         setLocatedCity(parsed.cityOrCounty || "");
         setLocatedDetail(parsed.detailText || "");
       }
-      setLocatedRawText(JSON.stringify({ coords: pos.coords, reverse: info }, null, 2));
+      setLocatedRawText(
+        JSON.stringify({ coords: pos.coords, reverse: info }, null, 2),
+      );
     } catch {
       setErrorText("定位失败，请重试");
     } finally {
@@ -350,7 +417,9 @@ export default function LocationScreen() {
       handleBack();
       return;
     }
-    const selectedCityLabel = stripCityCountySuffix(selectedCounty?.name || selectedCity?.name || String(city || "上海"));
+    const selectedCityLabel = stripCityCountySuffix(
+      selectedCounty?.name || selectedCity?.name || String(city || "上海"),
+    );
     navigateWithSelection(selectedCityLabel, keyword.trim());
   };
 
@@ -363,8 +432,18 @@ export default function LocationScreen() {
     return SUGGESTIONS.filter((item) => item.label.includes(keyword.trim()));
   }, [keyword]);
 
-  const activeOptions = activeLevel === "province" ? provinceOptions : activeLevel === "city" ? cityOptions : countyOptions;
-  const activeTitle = activeLevel === "province" ? "选择省" : activeLevel === "city" ? "选择市" : "选择县/区";
+  const activeOptions =
+    activeLevel === "province"
+      ? provinceOptions
+      : activeLevel === "city"
+        ? cityOptions
+        : countyOptions;
+  const activeTitle =
+    activeLevel === "province"
+      ? "选择省"
+      : activeLevel === "city"
+        ? "选择市"
+        : "选择县/区";
 
   return (
     <View className="flex-1 bg-white">
@@ -385,20 +464,42 @@ export default function LocationScreen() {
         </View>
 
         <View className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-          <Text className="text-xs text-slate-500">行政区选择（省、市必填，县/区可选）</Text>
+          <Text className="text-xs text-slate-500">
+            行政区选择（省、市必填，县/区可选）
+          </Text>
           <View className="mt-2 flex-row items-center gap-2">
-            <Pressable className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2" onPress={() => setActiveLevel("province")}>
-              <Text numberOfLines={1} className={`text-sm ${selectedProvince ? "text-slate-700" : "text-slate-400"}`}>
+            <Pressable
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2"
+              onPress={() => setActiveLevel("province")}
+            >
+              <Text
+                numberOfLines={1}
+                className={`text-sm ${selectedProvince ? "text-slate-700" : "text-slate-400"}`}
+              >
                 {selectedProvince?.name || "请选择省"}
               </Text>
             </Pressable>
-            <Pressable className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2" onPress={() => setActiveLevel("city")} disabled={!provinceCode}>
-              <Text numberOfLines={1} className={`text-sm ${selectedCity ? "text-slate-700" : "text-slate-400"}`}>
+            <Pressable
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2"
+              onPress={() => setActiveLevel("city")}
+              disabled={!provinceCode}
+            >
+              <Text
+                numberOfLines={1}
+                className={`text-sm ${selectedCity ? "text-slate-700" : "text-slate-400"}`}
+              >
                 {selectedCity?.name || "请选择市"}
               </Text>
             </Pressable>
-            <Pressable className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2" onPress={() => setActiveLevel("county")} disabled={!cityCode}>
-              <Text numberOfLines={1} className={`text-sm ${selectedCounty ? "text-slate-700" : "text-slate-400"}`}>
+            <Pressable
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2"
+              onPress={() => setActiveLevel("county")}
+              disabled={!cityCode}
+            >
+              <Text
+                numberOfLines={1}
+                className={`text-sm ${selectedCounty ? "text-slate-700" : "text-slate-400"}`}
+              >
                 {selectedCounty?.name || "县/区(可选)"}
               </Text>
             </Pressable>
@@ -408,12 +509,16 @@ export default function LocationScreen() {
               disabled={!provinceCode || !cityCode}
               className={`flex-1 rounded-xl py-2.5 ${provinceCode && cityCode ? "bg-[#1890FF]" : "bg-slate-200"}`}
               onPress={() => {
-                const target = stripCityCountySuffix(selectedCounty?.name || selectedCity?.name || "");
+                const target = stripCityCountySuffix(
+                  selectedCounty?.name || selectedCity?.name || "",
+                );
                 if (!target) return;
                 handleSelect(target, "");
               }}
             >
-              <Text className="text-center text-sm font-semibold text-white">仅返回市/县名</Text>
+              <Text className="text-center text-sm font-semibold text-white">
+                仅返回市/县名
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -428,31 +533,45 @@ export default function LocationScreen() {
             <IconSymbol size={18} name="location.fill" color="#1890FF" />
           </Pressable>
         </View>
-        {errorText ? <Text className="mt-2 text-xs text-red-500">{errorText}</Text> : null}
+        {errorText ? (
+          <Text className="mt-2 text-xs text-red-500">{errorText}</Text>
+        ) : null}
 
         {locatedCity ? (
           <View className="mt-2 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-            <Text className="text-xs text-slate-500">当前定位结果（可直接返回）</Text>
+            <Text className="text-xs text-slate-500">
+              当前定位结果（可直接返回）
+            </Text>
             <View className="mt-2 gap-2">
               <Pressable
                 onPress={() => handleSelect(locatedCity, "")}
                 className="rounded-xl border border-[#D8E8FA] bg-white px-3 py-2"
               >
-                <Text className="text-sm font-semibold text-slate-700">{locatedCity}</Text>
+                <Text className="text-sm font-semibold text-slate-700">
+                  {locatedCity}
+                </Text>
               </Pressable>
               <Pressable
-                onPress={() => handleSelect(locatedCity, locatedDetail || locatedCity)}
+                onPress={() =>
+                  handleSelect(locatedCity, locatedDetail || locatedCity)
+                }
                 className="rounded-xl border border-[#D8E8FA] bg-white px-3 py-2"
               >
                 <Text className="text-sm text-slate-700">
-                  {locatedDetail ? `${locatedCity} ${locatedDetail}` : locatedCity}
+                  {locatedDetail
+                    ? `${locatedCity} ${locatedDetail}`
+                    : locatedCity}
                 </Text>
               </Pressable>
             </View>
             {__DEV__ && locatedRawText ? (
               <View className="mt-3 rounded-xl bg-white px-2.5 py-2">
-                <Text className="text-[11px] text-slate-400">定位原始返回（调试）</Text>
-                <Text className="mt-1 text-[11px] text-slate-500">{locatedRawText}</Text>
+                <Text className="text-[11px] text-slate-400">
+                  定位原始返回（调试）
+                </Text>
+                <Text className="mt-1 text-[11px] text-slate-500">
+                  {locatedRawText}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -468,12 +587,17 @@ export default function LocationScreen() {
                 suggestions.map((item) => (
                   <Pressable
                     key={`${item.city}-${item.label}`}
-                    onPress={() => handleSelect(stripCityCountySuffix(item.city), item.label)}
+                    onPress={() =>
+                      handleSelect(stripCityCountySuffix(item.city), item.label)
+                    }
                     className="mt-2 rounded-2xl border border-slate-100 bg-white px-3 py-3"
                   >
                     <Text className="text-sm text-slate-700">
                       {item.label}
-                      <Text className="text-xs text-slate-400"> · {item.city}</Text>
+                      <Text className="text-xs text-slate-400">
+                        {" "}
+                        · {item.city}
+                      </Text>
                     </Text>
                   </Pressable>
                 ))
@@ -495,7 +619,12 @@ export default function LocationScreen() {
                 historyItems.map((item) => (
                   <Pressable
                     key={item}
-                    onPress={() => handleSelect(stripCityCountySuffix(String(city || "上海")), item)}
+                    onPress={() =>
+                      handleSelect(
+                        stripCityCountySuffix(String(city || "上海")),
+                        item,
+                      )
+                    }
                     className="rounded-full border border-slate-100 bg-white px-3 py-2"
                   >
                     <Text className="text-xs text-slate-600">{item}</Text>
@@ -507,7 +636,11 @@ export default function LocationScreen() {
             <Text className="mt-6 text-sm text-slate-500">热门城市</Text>
             <View className="mt-3 flex-row flex-wrap gap-2">
               {HOT_CITIES.map((item) => (
-                <Pressable key={item} onPress={() => handleSelect(stripCityCountySuffix(item), "")} className="rounded-full bg-[#F5F7FB] px-3 py-2">
+                <Pressable
+                  key={item}
+                  onPress={() => handleSelect(stripCityCountySuffix(item), "")}
+                  className="rounded-full bg-[#F5F7FB] px-3 py-2"
+                >
                   <Text className="text-xs text-slate-600">{item}</Text>
                 </Pressable>
               ))}
@@ -518,7 +651,12 @@ export default function LocationScreen() {
               {HOT_AREAS.map((item) => (
                 <Pressable
                   key={item}
-                  onPress={() => handleSelect(stripCityCountySuffix(String(city || "上海")), item)}
+                  onPress={() =>
+                    handleSelect(
+                      stripCityCountySuffix(String(city || "上海")),
+                      item,
+                    )
+                  }
                   className="rounded-full bg-[#F5F7FB] px-3 py-2"
                 >
                   <Text className="text-xs text-slate-600">{item}</Text>
@@ -529,11 +667,21 @@ export default function LocationScreen() {
         )}
       </View>
 
-      <FilterBottomSheet visible={Boolean(activeLevel)} title={activeTitle} onClose={() => setActiveLevel(null)}>
+      <FilterBottomSheet
+        visible={Boolean(activeLevel)}
+        title={activeTitle}
+        onClose={() => setActiveLevel(null)}
+      >
         {regionLoading ? (
-          <Text className="py-3 text-xs text-slate-400">加载全国省市县数据中...</Text>
+          <Text className="py-3 text-xs text-slate-400">
+            加载全国省市县数据中...
+          </Text>
         ) : (
-          <ScrollView className="max-h-80">
+          <ScrollView
+            className="max-h-80"
+            showsVerticalScrollIndicator={true}
+            persistentScrollbar={true}
+          >
             {activeOptions.map((item) => (
               <Pressable
                 key={item.code}
