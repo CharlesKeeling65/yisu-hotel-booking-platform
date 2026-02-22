@@ -44,7 +44,10 @@ export default function RegisterScreen() {
         <View className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-lg">
           <View className="flex-row items-center justify-between">
             <Text className="text-lg font-semibold text-slate-900">注册</Text>
-            <Pressable onPress={handleClose} className="h-8 w-8 items-center justify-center rounded-full bg-slate-100">
+            <Pressable
+              onPress={handleClose}
+              className="h-8 w-8 items-center justify-center rounded-full bg-slate-100"
+            >
               <Text className="text-base text-slate-500">×</Text>
             </Pressable>
           </View>
@@ -99,7 +102,9 @@ export default function RegisterScreen() {
             disabled={loading}
             className={`mt-6 rounded-xl py-3 items-center ${loading ? "bg-slate-200" : "bg-[#2B7FC7]"}`}
           >
-            <Text className={`text-base font-semibold ${loading ? "text-slate-500" : "text-white"}`}>
+            <Text
+              className={`text-base font-semibold ${loading ? "text-slate-500" : "text-white"}`}
+            >
               注册
             </Text>
           </Pressable>

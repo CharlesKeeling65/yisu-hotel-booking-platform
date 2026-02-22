@@ -655,20 +655,36 @@ app.post("/api/customer/register", async (req, res) => {
   const p = req.body || {};
   const plain = String(p.password || "");
   const phone = p.phone ? String(p.phone).trim() : "";
-  if (!phone || !plain) return res.status(400).json({ code: 400, msg: "手机号与密码必填" });
+  if (!phone || !plain)
+    return res.status(400).json({ code: 400, msg: "手机号与密码必填" });
   try {
     // generate customer id server-side with prefix (prefer UUID)
-    const cid = (crypto.randomUUID ? `customer_${crypto.randomUUID()}` : genId("customer"));
+    const cid = crypto.randomUUID
+      ? `customer_${crypto.randomUUID()}`
+      : genId("customer");
     // ensure phone unique
-    const [dupPhone] = await pool.query("SELECT id FROM `Customer` WHERE phone = ? LIMIT 1", [phone]);
-    if (dupPhone && dupPhone.length) return res.status(409).json({ code: 409, msg: "手机号已被注册" });
+    const [dupPhone] = await pool.query(
+      "SELECT id FROM `Customer` WHERE phone = ? LIMIT 1",
+      [phone],
+    );
+    if (dupPhone && dupPhone.length)
+      return res.status(409).json({ code: 409, msg: "手机号已被注册" });
     const cipher = sha256(plain);
     const hashed = hashPassword(cipher);
     await pool.query(
       "INSERT INTO `Customer` (id, password, phone, name, email) VALUES (?, ?, ?, ?, ?)",
-      [cid, hashed, phone, p.name ? String(p.name).trim() : null, p.email ? String(p.email).trim() : null],
+      [
+        cid,
+        hashed,
+        phone,
+        p.name ? String(p.name).trim() : null,
+        p.email ? String(p.email).trim() : null,
+      ],
     );
-    const [rows] = await pool.query("SELECT id, phone, name, email, createdAt, updatedAt FROM `Customer` WHERE id = ?", [cid]);
+    const [rows] = await pool.query(
+      "SELECT id, phone, name, email, createdAt, updatedAt FROM `Customer` WHERE id = ?",
+      [cid],
+    );
     return res.json({ code: 200, data: rows[0] });
   } catch (e) {
     return res.status(500).json({ code: 500, msg: e.message });
@@ -678,14 +694,34 @@ app.post("/api/customer/register", async (req, res) => {
 app.post("/api/customer/login", async (req, res) => {
   const { identifier, password } = req.body || {};
   const idv = String(identifier || "").trim();
-  if (!idv || !password) return res.status(400).json({ code: 400, msg: "手机号/邮箱 与 password 必填" });
+  if (!idv || !password)
+    return res
+      .status(400)
+      .json({ code: 400, msg: "手机号/邮箱 与 password 必填" });
   try {
-    const [rows] = await pool.query("SELECT id, password, phone, name, email, createdAt FROM `Customer` WHERE phone = ? OR email = ? LIMIT 1", [idv, idv]);
+    const [rows] = await pool.query(
+      "SELECT id, password, phone, name, email, createdAt FROM `Customer` WHERE phone = ? OR email = ? LIMIT 1",
+      [idv, idv],
+    );
     const customer = rows[0];
-    if (!customer) return res.status(401).json({ code: 401, msg: "用户名或密码错误" });
+    if (!customer)
+      return res.status(401).json({ code: 401, msg: "用户名或密码错误" });
     const cipher = sha256(String(password || ""));
-    if (!verifyPassword(cipher, customer.password)) return res.status(401).json({ code: 401, msg: "用户名或密码错误" });
-    return res.json({ code: 200, data: { token: `cust-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, customer: { id: customer.id, phone: customer.phone, name: customer.name, email: customer.email, createdAt: customer.createdAt } } });
+    if (!verifyPassword(cipher, customer.password))
+      return res.status(401).json({ code: 401, msg: "用户名或密码错误" });
+    return res.json({
+      code: 200,
+      data: {
+        token: `cust-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        customer: {
+          id: customer.id,
+          phone: customer.phone,
+          name: customer.name,
+          email: customer.email,
+          createdAt: customer.createdAt,
+        },
+      },
+    });
   } catch (e) {
     return res.status(500).json({ code: 500, msg: e.message });
   }

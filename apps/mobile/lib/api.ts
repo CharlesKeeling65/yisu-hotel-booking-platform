@@ -133,10 +133,13 @@ export async function customerRegister(
 }
 
 export async function customerLogin(identifier: string, password: string) {
-  const res = await getJson<{ token: string; customer: any }>(`/api/customer/login`, {
-    method: "POST",
-    body: JSON.stringify({ identifier, password }),
-  });
+  const res = await getJson<{ token: string; customer: any }>(
+    `/api/customer/login`,
+    {
+      method: "POST",
+      body: JSON.stringify({ identifier, password }),
+    },
+  );
   return res.data ?? null;
 }
 

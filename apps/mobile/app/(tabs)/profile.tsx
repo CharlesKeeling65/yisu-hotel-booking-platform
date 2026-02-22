@@ -8,6 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
+import LoginModal from "@/components/auth/LoginModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const BENEFITS = ["专属优惠", "积分兑礼", "优先客服"];
@@ -39,6 +40,7 @@ export default function ProfileScreen() {
     points: 3280,
     status: "正常",
   });
+  const [showLogin, setShowLogin] = useState(false);
 
   // 登录操作由独立的 /login 页面处理，profile 只负责展示与跳转
 
@@ -68,6 +70,7 @@ export default function ProfileScreen() {
   }, []);
 
   return (
+    <>
     <ScrollView
       className="flex-1 bg-white"
       contentContainerClassName="px-4 pb-24"
@@ -99,7 +102,7 @@ export default function ProfileScreen() {
           <View className="mt-5">
             <Pressable
               className="rounded-2xl bg-[#1890FF] py-3"
-              onPress={() => router.push("/login")}
+              onPress={() => setShowLogin(true)}
             >
               <Text className="text-center text-sm font-semibold text-white">
                 登录
@@ -175,5 +178,22 @@ export default function ProfileScreen() {
         </View>
       )}
     </ScrollView>
+        {showLogin && (
+          <LoginModal
+            visible={showLogin}
+            onClose={() => setShowLogin(false)}
+            onSuccess={(data) => {
+              // update profile page state after successful login
+              try {
+                const cust = data.customer || {};
+                setUser((prev) => ({ ...prev, name: cust.name || prev.name, phone: cust.phone || prev.phone }));
+                setIsLoggedIn(true);
+              } catch (_e) {
+                // ignore
+              }
+            }}
+          />
+        )}
+    </>
   );
 }
