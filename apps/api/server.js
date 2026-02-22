@@ -1396,6 +1396,11 @@ app.get("/api/hotels/:id/rooms", async (req, res) => {
 app.post("/api/hotels/:id/rooms", async (req, res) => {
   const { id: hotelId } = req.params;
   const p = req.body || {};
+  console.log(
+    "[debug] POST /api/hotels/%s/rooms payload:",
+    hotelId,
+    JSON.stringify(p).slice(0, 200),
+  );
   const roomId = genId("room");
   try {
     await pool.query(
@@ -1436,6 +1441,12 @@ app.post("/api/hotels/:id/rooms", async (req, res) => {
 async function handleBulkRoomSave(req, res) {
   const { id: hotelId } = req.params;
   const rooms = Array.isArray(req.body?.rooms) ? req.body.rooms : [];
+  console.log("[debug] bulk-save rooms count:", rooms.length);
+  if (rooms.length)
+    console.log(
+      "[debug] first item sample:",
+      JSON.stringify(rooms[0]).slice(0, 200),
+    );
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -1485,7 +1496,10 @@ async function handleBulkRoomSave(req, res) {
         );
       }
     }
-
+    console.log(
+      "[debug] bulk-save committed, fetched savedRows count:",
+      savedRows.length,
+    );
     await conn.commit();
 
     const [savedRows] = await pool.query(
