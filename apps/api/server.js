@@ -50,6 +50,12 @@ function normalizeRegionName(value) {
     .toLowerCase();
 }
 
+function stripRegionSuffix(value) {
+  return String(value || "")
+    .trim()
+    .replace(/(省|市|县)$/g, "");
+}
+
 const GEO_TIMEOUT_MS = Math.max(
   1200,
   Number(process.env.GEO_TIMEOUT_MS || 4500),
@@ -151,6 +157,38 @@ async function reverseGeocodeByStrategy(lat, lon) {
     (await reverseByBigDataCloud(lat, lon)) ||
     (await reverseByAmap(lat, lon)) || { provider: "none", reverse: [] }
   );
+}
+
+function normalizeReverseGeocodePayload(payload) {
+  const first = payload?.reverse?.[0] || {};
+  const province = String(first.region || "").trim();
+  const city = String(first.city || first.subregion || "").trim();
+  const district = String(first.district || "").trim();
+  const districtAsCity = /(县|市)$/.test(district);
+  const cityOrCountyRaw = districtAsCity ? district : city || district || province;
+  const cityOrCounty = stripRegionSuffix(cityOrCountyRaw);
+  const rawStreet = String(first.street || "").trim();
+  const streetNorm = stripRegionSuffix(rawStreet);
+  const cityNorm = stripRegionSuffix(city);
+  const districtNorm = stripRegionSuffix(district);
+  const street =
+    !rawStreet ||
+    streetNorm === cityOrCounty ||
+    streetNorm === cityNorm ||
+    streetNorm === districtNorm
+      ? ""
+      : rawStreet;
+
+  return {
+    provider: String(payload?.provider || "none"),
+    province,
+    city,
+    district,
+    cityOrCounty,
+    street,
+    displayText: [cityOrCounty, street].filter(Boolean).join(" "),
+    hasResult: Boolean(payload?.reverse?.length),
+  };
 }
 
 function toDateTime(value) {
@@ -797,9 +835,114 @@ app.get("/api/geocode/reverse", async (req, res) => {
   }
   try {
     const data = await reverseGeocodeByStrategy(lat, lon);
-    return res.json({ code: 200, data });
+    return res.json({
+      code: 200,
+      data: {
+        ...data,
+        normalized: normalizeReverseGeocodePayload(data),
+      },
+    });
   } catch (_e) {
-    return res.json({ code: 200, data: { provider: "none", reverse: [] } });
+    const fallback = { provider: "none", reverse: [] };
+    return res.json({
+      code: 200,
+      data: {
+        ...fallback,
+        normalized: normalizeReverseGeocodePayload(fallback),
+      },
+    });
+  }
+});
+
+app.get("/api/location/suggest", async (req, res) => {
+  const q = String(req.query.q || "").trim();
+  const preferredCity = stripRegionSuffix(String(req.query.city || "").trim());
+  const limit = Math.min(20, Math.max(1, parseIntSafe(req.query.limit || 12, 12)));
+  if (!q) return res.json({ code: 200, data: [] });
+
+  const kw = `%${q}%`;
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT b.id, b.name_cn, b.name_en, b.city, b.county, b.address, b.scenic_spots
+       FROM \`Hotel_Base\` b
+       JOIN \`Hotel_Audit\` a ON a.hotel_id = b.id
+       WHERE a.audit_status = 1
+         AND a.online_status = 1
+         AND (
+           b.name_cn LIKE ?
+           OR b.name_en LIKE ?
+           OR b.city LIKE ?
+           OR b.county LIKE ?
+           OR b.address LIKE ?
+           OR b.scenic_spots LIKE ?
+         )
+       ORDER BY b.featured_weight DESC, b.created_time DESC
+       LIMIT 60`,
+      [kw, kw, kw, kw, kw, kw],
+    );
+
+    const seen = new Set();
+    const items = [];
+    const qNorm = q.toLowerCase();
+
+    function pushItem(item) {
+      const city = stripRegionSuffix(item.city || "");
+      const label = String(item.label || "").trim();
+      if (!label) return;
+      const key = `${item.type}|${city}|${label}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      let score = Number(item.score || 0);
+      const labelLower = label.toLowerCase();
+      if (label === q) score += 90;
+      else if (label.startsWith(q)) score += 55;
+      else if (labelLower.includes(qNorm)) score += 25;
+      if (preferredCity && city === preferredCity) score += 18;
+
+      items.push({
+        type: item.type,
+        city,
+        county: stripRegionSuffix(item.county || ""),
+        label,
+        score,
+      });
+    }
+
+    for (const row of rows) {
+      const city = String(row.city || "");
+      const county = String(row.county || "");
+      const nameCn = String(row.name_cn || "").trim();
+      const nameEn = String(row.name_en || "").trim();
+      const scenicSpots = normalizeTextList(row.scenic_spots);
+
+      if (stripRegionSuffix(city).includes(stripRegionSuffix(q))) {
+        pushItem({ type: "city", city, county, label: stripRegionSuffix(city), score: 60 });
+      }
+      if (stripRegionSuffix(county).includes(stripRegionSuffix(q))) {
+        pushItem({ type: "area", city, county, label: stripRegionSuffix(county), score: 58 });
+      }
+      if (nameCn && nameCn.toLowerCase().includes(qNorm)) {
+        pushItem({ type: "hotel", city, county, label: nameCn, score: 50 });
+      }
+      if (nameEn && nameEn.toLowerCase().includes(qNorm)) {
+        pushItem({ type: "hotel", city, county, label: nameEn, score: 38 });
+      }
+      for (const spot of scenicSpots) {
+        if (String(spot).toLowerCase().includes(qNorm)) {
+          pushItem({ type: "scenic", city, county, label: spot, score: 52 });
+        }
+      }
+    }
+
+    items.sort((a, b) => b.score - a.score || a.label.length - b.label.length);
+    return res.json({
+      code: 200,
+      data: items.slice(0, limit).map(({ score, ...item }) => item),
+    });
+  } catch (e) {
+    return res.status(500).json({ code: 500, msg: e.message });
   }
 });
 
