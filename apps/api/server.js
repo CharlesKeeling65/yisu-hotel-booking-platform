@@ -371,12 +371,12 @@ function toLegacyRoom(row = {}, image) {
     id: row.id,
     hotel_id: row.hotel_id,
     type: row.name,
-    original: Number(row.price || 0),
+    original: Number(row.original_price != null ? row.original_price : row.price || 0),
     current: Number(row.price || 0),
-    discount: '',
-    remain: row.status === 0 ? 10 : 0,
+    discount: row.discount || '',
+    remain: Number(row.remain != null ? row.remain : (row.status === 0 ? 10 : 0)),
     status: row.status === 0 ? 'available' : 'soldout',
-    remark: '',
+    remark: row.remark || '',
     image: image || '',
     occupancy: Number(row.occupancy || 2),
     size: row.size,
@@ -922,18 +922,22 @@ app.post('/api/hotels/:id/rooms', async (req, res) => {
   const roomId = genId('room');
   try {
     await pool.query(
-      `INSERT INTO \`Room\` (id, hotel_id, name, price, occupancy, size, breakfast_included, refundable, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO \`Room\` (id, hotel_id, name, price, original_price, discount, remain, occupancy, size, breakfast_included, refundable, status, remark)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         roomId,
         hotelId,
         p.type || p.name || '标准房',
-        Number(p.current || p.price || p.original || 0),
+        Number(p.price != null ? p.price : (p.current != null ? p.current : 0)),
+        p.original != null ? Number(p.original) : null,
+        p.discount || null,
+        Number(p.remain != null ? p.remain : 0),
         Number(p.occupancy || 2),
         p.size ? Number(p.size) : null,
         p.breakfastIncluded ? 1 : 0,
         p.refundable === false ? 0 : 1,
         String(p.status || '').toLowerCase() === 'soldout' ? 1 : 0,
+        p.remark || null,
       ]
     );
     if (p.image) {
@@ -966,18 +970,22 @@ async function handleBulkRoomSave(req, res) {
     for (const item of rooms) {
       const roomId = item.id || genId('room');
       await conn.query(
-        `INSERT INTO \`Room\` (id, hotel_id, name, price, occupancy, size, breakfast_included, refundable, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO \`Room\` (id, hotel_id, name, price, original_price, discount, remain, occupancy, size, breakfast_included, refundable, status, remark)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           roomId,
           hotelId,
           item.type || item.name || '标准房',
-          Number(item.current || item.price || item.original || 0),
+          Number(item.price != null ? item.price : (item.current != null ? item.current : 0)),
+          item.original != null ? Number(item.original) : null,
+          item.discount || null,
+          Number(item.remain != null ? item.remain : 0),
           Number(item.occupancy || 2),
           item.size ? Number(item.size) : null,
           item.breakfastIncluded ? 1 : 0,
           item.refundable === false ? 0 : 1,
           String(item.status || '').toLowerCase() === 'soldout' ? 1 : 0,
+          item.remark || null,
         ]
       );
       if (item.image) {
@@ -1026,16 +1034,20 @@ app.put('/api/hotels/:id/rooms/:roomId', async (req, res) => {
   try {
     await pool.query(
       `UPDATE \`Room\`
-       SET name=?, price=?, occupancy=?, size=?, breakfast_included=?, refundable=?, status=?
+       SET name=?, price=?, original_price=?, discount=?, remain=?, occupancy=?, size=?, breakfast_included=?, refundable=?, status=?, remark=?
        WHERE id=?`,
       [
         p.type || p.name || '标准房',
-        Number(p.current || p.price || p.original || 0),
+        Number(p.price != null ? p.price : (p.current != null ? p.current : 0)),
+        p.original != null ? Number(p.original) : null,
+        p.discount || null,
+        Number(p.remain != null ? p.remain : 0),
         Number(p.occupancy || 2),
         p.size ? Number(p.size) : null,
         p.breakfastIncluded ? 1 : 0,
         p.refundable === false ? 0 : 1,
         String(p.status || '').toLowerCase() === 'soldout' ? 1 : 0,
+        p.remark || null,
         roomId,
       ]
     );
