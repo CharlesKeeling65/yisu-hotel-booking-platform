@@ -906,8 +906,12 @@ async function queryHotels(req) {
   const stats = {
     total: data.length,
     pending: data.filter((h) => Number(h.audit_status) === 0).length,
-    approvedOffline: data.filter((h) => Number(h.audit_status) === 1 && Number(h.online_status) === 0).length,
-    online: data.filter((h) => Number(h.audit_status) === 1 && Number(h.online_status) === 1).length,
+    approvedOffline: data.filter(
+      (h) => Number(h.audit_status) === 1 && Number(h.online_status) === 0,
+    ).length,
+    online: data.filter(
+      (h) => Number(h.audit_status) === 1 && Number(h.online_status) === 1,
+    ).length,
     rejected: data.filter((h) => Number(h.audit_status) === 2).length,
   };
 
@@ -981,19 +985,25 @@ app.get("/api/hotels/stats", async (req, res) => {
     }
 
     if (q.keyword) {
-      where.push(`(
+      where.push(
+        `(
       b.name_cn LIKE ?
       OR b.name_en LIKE ?
       OR b.address LIKE ?
       OR b.scenic_spots LIKE ?
       OR EXISTS (
         SELECT 1
-        FROM ` + "`Hotel_Label_Rel`" + ` rel
-        JOIN ` + "`Facility_Label`" + ` l ON rel.label_id = l.id
+        FROM ` +
+          "`Hotel_Label_Rel`" +
+          ` rel
+        JOIN ` +
+          "`Facility_Label`" +
+          ` l ON rel.label_id = l.id
         WHERE rel.hotel_id = b.id
           AND (l.label_name LIKE ? OR l.label_code LIKE ?)
       )
-    )`);
+    )`,
+      );
       const kw = `%${String(q.keyword).trim()}%`;
       params.push(kw, kw, kw, kw, kw, kw);
     }
@@ -1010,7 +1020,10 @@ app.get("/api/hotels/stats", async (req, res) => {
       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}`;
 
     const [rows] = await pool.query(statSql, params);
-    const r = rows && rows[0] ? rows[0] : { total: 0, pending: 0, approvedOffline: 0, online: 0, rejected: 0 };
+    const r =
+      rows && rows[0]
+        ? rows[0]
+        : { total: 0, pending: 0, approvedOffline: 0, online: 0, rejected: 0 };
     // ensure numbers
     const out = {
       total: Number(r.total || 0),
