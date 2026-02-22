@@ -37,7 +37,10 @@ export type ListParams = {
   sort?: "price_asc" | "price_desc" | "star_desc";
 };
 
-async function getJson<T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
+async function getJson<T>(
+  path: string,
+  options?: RequestInit,
+): Promise<ApiResponse<T>> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
@@ -64,8 +67,10 @@ export async function fetchMobileHotels<T>(params: ListParams = {}) {
   search.set("pageSize", String(params.pageSize || 10));
   if (params.city) search.set("city", params.city);
   if (params.keyword) search.set("keyword", params.keyword);
-  if (params.priceMin !== undefined) search.set("priceMin", String(params.priceMin));
-  if (params.priceMax !== undefined) search.set("priceMax", String(params.priceMax));
+  if (params.priceMin !== undefined)
+    search.set("priceMin", String(params.priceMin));
+  if (params.priceMax !== undefined)
+    search.set("priceMax", String(params.priceMax));
   if (params.stars?.length) {
     search.set("stars", params.stars.join(","));
   }
@@ -84,7 +89,8 @@ export async function fetchMobileHotels<T>(params: ListParams = {}) {
     }
   }
   if (params.tags?.length) search.set("tags", params.tags.join(","));
-  if (params.scenicSpots?.length) search.set("scenicSpots", params.scenicSpots.join(","));
+  if (params.scenicSpots?.length)
+    search.set("scenicSpots", params.scenicSpots.join(","));
   if (params.sort) search.set("sort", params.sort);
 
   const res = await getJson<T[]>(`/api/mobile/hotels?${search.toString()}`);
@@ -103,13 +109,34 @@ export async function fetchMobileHotelById<T>(id: string) {
 }
 
 export async function loginMobile(username: string, password: string) {
-  const res = await getJson<{ token: string; user: { username?: string; name: string } }>(
-    "/api/mobile/login",
-    {
-      method: "POST",
-      body: JSON.stringify({ username, password }),
-    }
-  );
+  const res = await getJson<{
+    token: string;
+    user: { username?: string; name: string };
+  }>("/api/mobile/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+  return res.data ?? null;
+}
+
+export async function customerRegister(
+  password: string,
+  phone: string,
+  name?: string,
+  email?: string,
+) {
+  const res = await getJson<any>(`/api/customer/register`, {
+    method: "POST",
+    body: JSON.stringify({ password, phone, name, email }),
+  });
+  return res.data ?? null;
+}
+
+export async function customerLogin(identifier: string, password: string) {
+  const res = await getJson<{ token: string; customer: any }>(`/api/customer/login`, {
+    method: "POST",
+    body: JSON.stringify({ identifier, password }),
+  });
   return res.data ?? null;
 }
 
@@ -117,6 +144,8 @@ export async function fetchReverseGeocode(lat: number, lon: number) {
   const search = new URLSearchParams();
   search.set("lat", String(lat));
   search.set("lon", String(lon));
-  const res = await getJson<ReverseGeocodePayload>(`/api/geocode/reverse?${search.toString()}`);
+  const res = await getJson<ReverseGeocodePayload>(
+    `/api/geocode/reverse?${search.toString()}`,
+  );
   return res.data ?? { provider: "none", reverse: [] };
 }

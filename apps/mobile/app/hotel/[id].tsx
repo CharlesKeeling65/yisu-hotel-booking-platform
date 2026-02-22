@@ -29,7 +29,7 @@ import {
     getDefaultSearchSession,
     setSearchSession,
 } from "@/lib/search-session";
-import type { Hotel } from "@yisu/shared";
+import type { Hotel, Room } from "@yisu/shared";
 
 function toCnMonthDay(s: string) {
   // 将 yyyy-mm-dd 转为 mm月dd日，提升可读性
@@ -212,6 +212,23 @@ export default function HotelDetailScreen() {
     router.replace("/");
   };
 
+  const handleBook = (room: Room) => {
+    if (!hotel) return;
+    router.push({
+      pathname: "/booking",
+      params: {
+        hotelId: hotel.id,
+        roomId: room.id,
+        checkIn: checkInDate,
+        checkOut: checkOutDate,
+        rooms: String(roomCount),
+        adults: String(adultCount),
+        children: String(childCount),
+        from: from || "",
+      },
+    });
+  };
+
   useEffect(() => {
     setSearchSession({
       city: city || "",
@@ -379,6 +396,7 @@ export default function HotelDetailScreen() {
           <View className="mt-3">
             <RoomList
               rooms={[...(hotel.rooms || [])].sort((a, b) => a.price - b.price)}
+              onBook={handleBook}
             />
           </View>
         </View>

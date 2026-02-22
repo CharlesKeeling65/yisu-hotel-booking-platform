@@ -4,11 +4,11 @@
  * - 未登录态：展示登录入口与权益说明
  * - 登录态：展示用户摘要、统计与资料信息
  */
-import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import { loginMobile } from "@/lib/api";
 
 const BENEFITS = ["专属优惠", "积分兑礼", "优先客服"];
 const QUICK_STATS = [
@@ -30,9 +30,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [username, setUsername] = useState("mobile");
-  const [password, setPassword] = useState("123456");
-  const [error, setError] = useState("");
+  const router = useRouter();
   const [user, setUser] = useState({
     name: "旅行达人小易",
     phone: "138****2468",
@@ -42,21 +40,32 @@ export default function ProfileScreen() {
     status: "正常",
   });
 
-  const handleLogin = async () => {
-    // 示例登录流程：调用 mobile API，成功后切换到登录态
-    setError("");
-    try {
-      const data = await loginMobile(username.trim(), password);
-      if (!data) {
-        setError("登录失败");
-        return;
+  // 登录操作由独立的 /login 页面处理，profile 只负责展示与跳转
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem("customer_token");
+        const info = await AsyncStorage.getItem("customer_info");
+        if (!mounted) return;
+        if (token && info) {
+          const parsed = JSON.parse(info);
+          setUser((prev) => ({
+            ...prev,
+            name: parsed.name || prev.name,
+            phone: parsed.phone || prev.phone,
+          }));
+          setIsLoggedIn(true);
+        }
+      } catch (e) {
+        // ignore
       }
-      setUser((prev) => ({ ...prev, name: data.user?.name || prev.name }));
-      setIsLoggedIn(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "用户名或密码错误");
-    }
-  };
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <ScrollView
@@ -87,35 +96,23 @@ export default function ProfileScreen() {
         </View>
 
         {!isLoggedIn && (
-          <Pressable
-            className="mt-5 rounded-2xl bg-[#1890FF] py-3"
-            onPress={handleLogin}
-          >
-            <Text className="text-center text-sm font-semibold text-white">
-              登录 / 注册
-            </Text>
-          </Pressable>
-        )}
-
-        {!isLoggedIn && (
-          <View className="mt-4 gap-3">
-            <TextInput
-              value={username}
-              onChangeText={setUsername}
-              placeholder="用户名"
-              className="rounded-2xl border border-slate-100 px-4 py-3 text-sm text-slate-900"
-              autoCapitalize="none"
-            />
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="密码"
-              secureTextEntry
-              className="rounded-2xl border border-slate-100 px-4 py-3 text-sm text-slate-900"
-            />
-            {error ? (
-              <Text className="text-xs text-red-500">登录失败：{error}</Text>
-            ) : null}
+          <View className="mt-5">
+            <Pressable
+              className="rounded-2xl bg-[#1890FF] py-3"
+              onPress={() => router.push("/login")}
+            >
+              <Text className="text-center text-sm font-semibold text-white">
+                登录
+              </Text>
+            </Pressable>
+            <Pressable
+              className="mt-3 rounded-2xl border border-[#1890FF] py-3"
+              onPress={() => router.push("/register")}
+            >
+              <Text className="text-center text-sm font-semibold text-[#1890FF]">
+                注册
+              </Text>
+            </Pressable>
           </View>
         )}
 
@@ -154,7 +151,11 @@ export default function ProfileScreen() {
 
           <Pressable
             className="mt-5 rounded-2xl border border-[#1890FF] py-3"
-            onPress={() => setIsLoggedIn(false)}
+            onPress={async () => {
+              await AsyncStorage.removeItem("customer_token");
+              await AsyncStorage.removeItem("customer_info");
+              setIsLoggedIn(false);
+            }}
           >
             <Text className="text-center text-sm font-semibold text-[#1890FF]">
               退出登录
