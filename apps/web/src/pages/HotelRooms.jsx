@@ -60,6 +60,16 @@ const EMPTY_ROW = {
   image: "",
 };
 
+// 常用的房型备注可选标签（可编辑、可增减）
+const PRESET_TAGS = [
+  "含早餐",
+  "双早",
+  "免费取消",
+  "可加床",
+  "靠窗",
+  "高楼层",
+  "无窗",
+];
 export default function HotelRooms() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -466,6 +476,10 @@ export default function HotelRooms() {
   const inputClass =
     "w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-[14px] text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 focus:bg-white transition-all";
 
+  // 合并预设标签与酒店自身标签作为建议选项（去重）
+  const suggestionTags = Array.from(
+    new Set([...(PRESET_TAGS || []), ...(hotelLabels || [])]),
+  );
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-24">
       {toast && (
@@ -840,8 +854,8 @@ export default function HotelRooms() {
                       </div>
 
                       <div className="flex flex-wrap gap-2">
-                        {hotelLabels && hotelLabels.length ? (
-                          hotelLabels.map((l) => {
+                        {suggestionTags && suggestionTags.length ? (
+                          suggestionTags.map((l) => {
                             const selected = Array.isArray(r.remarkTags)
                               ? r.remarkTags.includes(l)
                               : (r.remark || "")
@@ -865,7 +879,7 @@ export default function HotelRooms() {
                                     const i = exist.indexOf(l);
                                     if (i >= 0) exist.splice(i, 1);
                                   } else {
-                                    exist.push(l);
+                                    if (!exist.includes(l)) exist.push(l);
                                   }
                                   updateRow(idx, { remarkTags: exist });
                                 }}
@@ -882,7 +896,7 @@ export default function HotelRooms() {
                           })
                         ) : (
                           <div className="text-sm text-slate-400">
-                            暂无酒店标签可选，可直接输入自定义标签。
+                            暂无可选标签，可直接输入自定义标签。
                           </div>
                         )}
                       </div>
