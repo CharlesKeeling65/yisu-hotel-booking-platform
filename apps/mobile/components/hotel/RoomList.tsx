@@ -89,6 +89,13 @@ function RoomRow({
 
               return (
                 <View className="mt-2 flex-row flex-wrap items-center gap-2">
+                  {capacity != null && (
+                    <View className="flex-row items-center gap-1.5 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                      <Text className="text-xs text-slate-600">
+                        最多 {capacity} 人
+                      </Text>
+                    </View>
+                  )}
                   <View className="flex-row items-center gap-1.5 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
                     <Text className="text-xs text-slate-600">
                       面积 {area ?? "-"} ㎡
