@@ -593,7 +593,6 @@ function toLegacyRoom(row = {}, image) {
     occupancy: Number(row.occupancy || 2),
     size: row.size,
     breakfastIncluded: Number(row.breakfast_included || 0) === 1,
-    refundable: Number(row.refundable || 1) === 1,
   };
 }
 
@@ -1400,8 +1399,8 @@ app.post("/api/hotels/:id/rooms", async (req, res) => {
   const roomId = genId("room");
   try {
     await pool.query(
-      `INSERT INTO \`Room\` (id, hotel_id, name, price, original_price, discount, remain, occupancy, size, breakfast_included, refundable, status, remark)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO \`Room\` (id, hotel_id, name, price, original_price, discount, remain, occupancy, size, breakfast_included, status, remark)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         roomId,
         hotelId,
@@ -1413,7 +1412,6 @@ app.post("/api/hotels/:id/rooms", async (req, res) => {
         Number(p.occupancy || 2),
         p.size ? Number(p.size) : null,
         p.breakfastIncluded ? 1 : 0,
-        p.refundable === false ? 0 : 1,
         String(p.status || "").toLowerCase() === "soldout" ? 1 : 0,
         p.remark || null,
       ],
@@ -1457,8 +1455,8 @@ async function handleBulkRoomSave(req, res) {
     for (const item of rooms) {
       const roomId = item.id || genId("room");
       await conn.query(
-        `INSERT INTO \`Room\` (id, hotel_id, name, price, original_price, discount, remain, occupancy, size, breakfast_included, refundable, status, remark)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO \`Room\` (id, hotel_id, name, price, original_price, discount, remain, occupancy, size, breakfast_included, status, remark)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           roomId,
           hotelId,
@@ -1476,7 +1474,6 @@ async function handleBulkRoomSave(req, res) {
           Number(item.occupancy || 2),
           item.size ? Number(item.size) : null,
           item.breakfastIncluded ? 1 : 0,
-          item.refundable === false ? 0 : 1,
           String(item.status || "").toLowerCase() === "soldout" ? 1 : 0,
           item.remark || null,
         ],
@@ -1534,7 +1531,7 @@ app.put("/api/hotels/:id/rooms/:roomId", async (req, res) => {
   try {
     await pool.query(
       `UPDATE \`Room\`
-       SET name=?, price=?, original_price=?, discount=?, remain=?, occupancy=?, size=?, breakfast_included=?, refundable=?, status=?, remark=?
+       SET name=?, price=?, original_price=?, discount=?, remain=?, occupancy=?, size=?, breakfast_included=?, status=?, remark=?
        WHERE id=?`,
       [
         p.type || p.name || "标准房",
@@ -1545,7 +1542,6 @@ app.put("/api/hotels/:id/rooms/:roomId", async (req, res) => {
         Number(p.occupancy || 2),
         p.size ? Number(p.size) : null,
         p.breakfastIncluded ? 1 : 0,
-        p.refundable === false ? 0 : 1,
         String(p.status || "").toLowerCase() === "soldout" ? 1 : 0,
         p.remark || null,
         roomId,
@@ -1877,7 +1873,6 @@ app.get("/api/mobile/hotels", async (req, res) => {
           size: x.size ? Number(x.size) : null,
           status: Number(x.status || 0) === 0 ? "available" : "soldout",
           breakfastIncluded: Number(x.breakfast_included || 0) === 1,
-          refundable: Number(x.refundable || 1) === 1,
           image:
             rel.roomImageByRoom[x.id] ||
             `https://picsum.photos/seed/room_${x.id}/800/500`,
@@ -1922,7 +1917,6 @@ app.get("/api/mobile/hotels/:id", async (req, res) => {
         size: x.size ? Number(x.size) : null,
         status: Number(x.status || 0) === 0 ? "available" : "soldout",
         breakfastIncluded: Number(x.breakfast_included || 0) === 1,
-        refundable: Number(x.refundable || 1) === 1,
         image:
           rel.roomImageByRoom[x.id] ||
           `https://picsum.photos/seed/room_${x.id}/800/500`,

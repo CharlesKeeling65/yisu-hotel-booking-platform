@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Coffee,
   Edit,
   EyeOff,
   LogOut,
@@ -21,7 +20,7 @@ import {
   Star,
   UserCircle,
   Users,
-  X,
+  X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react"; // eslint-disable-line no-unused-vars
 import { useNavigate, useParams } from "react-router-dom";
@@ -673,21 +672,57 @@ export default function HotelDetail() {
                             <Maximize size={14} className="text-slate-400" />
                             面积 {r.size || r.area || "-"} ㎡
                           </span>
-                          <span className="flex items-center gap-1.5 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
-                            <Coffee size={14} className="text-slate-400" />
-                            {Number(r.breakfast_included) === 1
-                              ? "含双早"
-                              : "无早餐"}
-                          </span>
-                          {Number(r.refundable) === 1 ? (
-                            <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
-                              <CheckCircle2 size={14} /> 免费取消
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1.5 text-slate-400">
-                              <Ban size={14} /> 不可取消
-                            </span>
-                          )}
+                          {(() => {
+                            const tags = Array.isArray(r.remarkTags)
+                              ? r.remarkTags
+                              : r.remark
+                                ? String(r.remark)
+                                    .split(",")
+                                    .map((s) => s.trim())
+                                    .filter(Boolean)
+                                : [];
+
+                            return (
+                              <>
+                                {tags.length > 0 && (
+                                  <>
+                                    {tags.map((t) => (
+                                      <span
+                                        key={t}
+                                        className="px-2 py-0.5 bg-slate-50 text-slate-600 rounded-md text-xs font-medium border border-slate-100/60 ml-2"
+                                      >
+                                        {t}
+                                      </span>
+                                    ))}
+                                  </>
+                                )}
+
+                                {(() => {
+                                  const cancelTag = tags.find((t) =>
+                                    /免费.*取消|免费取消|可取消/.test(t),
+                                  );
+                                  const noCancelTag = tags.find((t) =>
+                                    /不可.*取消|不可取消/.test(t),
+                                  );
+                                  if (cancelTag) {
+                                    return (
+                                      <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+                                        <CheckCircle2 size={14} /> {cancelTag}
+                                      </span>
+                                    );
+                                  }
+                                  if (noCancelTag) {
+                                    return (
+                                      <span className="flex items-center gap-1.5 text-slate-400">
+                                        <Ban size={14} /> {noCancelTag}
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
 
