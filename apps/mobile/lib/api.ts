@@ -212,6 +212,14 @@ export async function createMobileOrder(payload: CreateOrderPayload) {
   return res.data ?? null;
 }
 
+export async function payMobileOrder(orderId: string, customerId: string) {
+  const res = await getJson<MobileOrder>(`/api/mobile/orders/${orderId}/pay`, {
+    method: "POST",
+    body: JSON.stringify({ customerId }),
+  });
+  return res.data ?? null;
+}
+
 export async function fetchMobileOrders(params: {
   customerId: string;
   status?: string;

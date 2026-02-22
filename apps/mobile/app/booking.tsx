@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -12,7 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { createMobileOrder, fetchMobileHotelById } from "@/lib/api";
+import { createMobileOrder, fetchMobileHotelById, payMobileOrder } from "@/lib/api";
 import type { Hotel, Room } from "@yisu/shared";
 
 function toCnDate(s: string) {
@@ -52,6 +53,11 @@ export default function BookingScreen() {
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [phoneError, setPhoneError] = useState("");
+
+  const [payVisible, setPayVisible] = useState(false);
+  const autoBackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
+  const [currentCustomerId, setCurrentCustomerId] = useState<string | null>(null);
 
   const roomCount = Math.max(1, Number(rooms || 1));
   const adultCount = Math.max(roomCount, Number(adults || 1));
@@ -159,20 +165,68 @@ export default function BookingScreen() {
         throw new Error("创建订单失败，请稍后重试");
       }
 
-      Alert.alert(
-        "预订成功",
-        `订单已生成，可在“订单”页查看。\n\n预订人：${guestName}\n联系方式：${guestPhone}`,
-        [
-          {
-            text: "知道了",
-            onPress: () => router.replace("/(tabs)/cart"),
-          },
-        ],
-      );
+      // 订单创建成功后，记录订单与客户信息，并弹出“模拟微信支付”页面
+      setCurrentOrderId(order.id);
+      setCurrentCustomerId(customerId);
+      setPayVisible(true);
     } catch (e: any) {
       Alert.alert("下单失败", e?.message || String(e));
     }
   };
+
+  const handleConfirmPay = async () => {
+    if (!currentOrderId || !currentCustomerId) {
+      // 理论上不会发生，兜底直接当作已支付成功跳转
+      router.replace("/(tabs)/cart");
+      return;
+    }
+
+    try {
+      await payMobileOrder(currentOrderId, currentCustomerId);
+    } catch (e: any) {
+      Alert.alert("支付失败", e?.message || String(e));
+      return;
+    }
+
+    setPayVisible(false);
+
+    if (autoBackTimerRef.current) {
+      clearTimeout(autoBackTimerRef.current);
+    }
+
+    autoBackTimerRef.current = setTimeout(() => {
+      router.replace("/(tabs)/cart");
+    }, 5000);
+
+    Alert.alert(
+      "支付成功",
+      "已成功支付，系统将在 5 秒后自动返回订单页面。\n\n您也可以点击“查看订单”马上查看订单。",
+      [
+        {
+          text: "留在此页",
+          style: "cancel",
+        },
+        {
+          text: "查看订单",
+          onPress: () => {
+            if (autoBackTimerRef.current) {
+              clearTimeout(autoBackTimerRef.current);
+              autoBackTimerRef.current = null;
+            }
+            router.replace("/(tabs)/cart");
+          },
+        },
+      ],
+    );
+  };
+
+  useEffect(() => {
+    return () => {
+      if (autoBackTimerRef.current) {
+        clearTimeout(autoBackTimerRef.current);
+      }
+    };
+  }, []);
 
   const renderContent = () => {
     if (loading) {
@@ -378,6 +432,49 @@ export default function BookingScreen() {
       </View>
 
       {renderContent()}
+
+      <Modal
+        visible={payVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPayVisible(false)}
+      >
+        <View className="flex-1 justify-end bg-black/40">
+          <View className="rounded-t-3xl bg-white px-6 pb-8 pt-4">
+            <Text className="text-center text-base font-semibold text-neutral-900">
+              微信支付
+            </Text>
+            <Text className="mt-2 text-center text-xs text-neutral-500">
+              模拟微信支付页面（仅为演示，不会真实扣款）
+            </Text>
+            <Text className="mt-6 text-center text-3xl font-semibold text-emerald-600">
+              ¥{payable.toFixed(2)}
+            </Text>
+            <Text className="mt-2 text-center text-xs text-neutral-500">
+              订单金额
+            </Text>
+
+            <View className="mt-8 flex-row justify-between">
+              <Pressable
+                className="flex-1 rounded-full border border-neutral-300 py-3 mr-2 items-center justify-center"
+                onPress={() => setPayVisible(false)}
+              >
+                <Text className="text-sm font-medium text-neutral-700">
+                  取消
+                </Text>
+              </Pressable>
+              <Pressable
+                className="flex-1 rounded-full bg-[#07C160] py-3 ml-2 items-center justify-center"
+                onPress={handleConfirmPay}
+              >
+                <Text className="text-sm font-semibold text-white">
+                  确认支付
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <View
         className="absolute bottom-0 left-0 right-0 flex-row items-center border-t border-neutral-200 bg-white px-4"

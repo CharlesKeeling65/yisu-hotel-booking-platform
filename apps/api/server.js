@@ -2092,6 +2092,44 @@ app.post("/api/mobile/orders", async (req, res) => {
   }
 });
 
+// 移动端：订单支付成功，更新支付状态为已支付
+app.post("/api/mobile/orders/:id/pay", async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  const customerId = String(req.body?.customerId || "").trim();
+  if (!id) {
+    return res.status(400).json({ code: 400, msg: "缺少必要参数：订单 id" });
+  }
+
+  const now = formatDateForMySQL();
+
+  try {
+    let sql =
+      "UPDATE `orders` SET status = ?, payment_status = ?, updated_at = ? WHERE id = ?";
+    const params = ["upcoming", "paid", now, id];
+    if (customerId) {
+      sql += " AND customer_id = ?";
+      params.push(customerId);
+    }
+
+    const [result] = await pool.query(sql, params);
+
+    if (!result || !result.affectedRows) {
+      return res
+        .status(404)
+        .json({ code: 404, msg: "订单不存在或不属于当前用户" });
+    }
+
+    const [rows] = await pool.query(
+      "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id WHERE o.id = ? LIMIT 1",
+      [id],
+    );
+    const orderRow = rows[0];
+    return res.json({ code: 200, data: mapMobileOrderRow(orderRow) });
+  } catch (e) {
+    return res.status(500).json({ code: 500, msg: e.message });
+  }
+});
+
 app.get("/api/mobile/orders", async (req, res) => {
   const customerId = String(
     req.query.customerId || req.query.customer_id || "",
