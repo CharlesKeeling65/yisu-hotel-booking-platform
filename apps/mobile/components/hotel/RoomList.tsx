@@ -127,20 +127,42 @@ function RoomRow({
 
         <View className="mt-1.5 flex-row items-end justify-end">
           <View className="flex-row items-end gap-2.5">
-            <Text>
-              <Text
-                className="font-semibold text-amber-500"
-                style={{ fontSize: Math.max(13, Math.floor(priceSize * 0.54)) }}
-              >
-                ¥
-              </Text>
-              <Text
-                className="font-semibold text-amber-600"
-                style={{ fontSize: priceSize - 1 }}
-              >
-                {room.price}
-              </Text>
-            </Text>
+            {(() => {
+              const originalUnit = Number(raw?.original_price ?? room.price ?? 0);
+              const priceUnit = Number(room.price ?? 0);
+              const showOriginal = originalUnit > priceUnit;
+              return (
+                <View className="flex-row items-end">
+                  {showOriginal && (
+                    <Text
+                      style={{
+                        textDecorationLine: "line-through",
+                        textDecorationColor: "#ef4444",
+                        color: "#ef4444",
+                        fontSize: Math.max(14, Math.floor(priceSize * 0.7)),
+                        marginRight: 6,
+                      }}
+                    >
+                      ¥{originalUnit}
+                    </Text>
+                  )}
+                  <Text>
+                    <Text
+                      className="font-semibold text-amber-500"
+                      style={{ fontSize: Math.max(13, Math.floor(priceSize * 0.54)) }}
+                    >
+                      ¥
+                    </Text>
+                    <Text
+                      className="font-semibold text-amber-600"
+                      style={{ fontSize: priceSize }}
+                    >
+                      {priceUnit}
+                    </Text>
+                  </Text>
+                </View>
+              );
+            })()}
             <Pressable
               disabled={!available}
               onPress={() => onBook?.(room)}

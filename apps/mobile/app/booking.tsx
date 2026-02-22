@@ -111,9 +111,19 @@ export default function BookingScreen() {
     }
   }, [room?.remain]);
 
-  const roomTotal = (room?.price || 0) * nights * roomsCount;
-  const coupon = roomTotal >= 200 ? 26 : 0;
-  const payable = Math.max(0, roomTotal - coupon);
+  // 价格计算：
+  // - 原始价（用于展示划线价）优先使用数据库的 original_price（room.raw.original_price），
+  //   若不存在则回退到当前售价 room.price。
+  // - 原始总额 = original_unit * roomsCount * nights
+  // - 现价总额 = price_unit * roomsCount * nights
+  // - 优惠 = max(0, 原始总额 - 现价总额)
+  // - 应付 = 现价总额
+  const originalUnit = Number(room?.raw?.original_price ?? room?.price ?? 0);
+  const priceUnit = Number(room?.price ?? 0);
+  const originalTotal = originalUnit * nights * roomsCount;
+  const priceTotal = priceUnit * nights * roomsCount;
+  const coupon = Math.max(0, originalTotal - priceTotal);
+  const payable = Math.max(0, priceTotal);
 
   const handlePay = async () => {
     if (!room || !hotel) {
@@ -171,7 +181,8 @@ export default function BookingScreen() {
         childrenCount: childCount,
         guestName: guestName.trim(),
         guestPhone: guestPhone.trim(),
-        priceSubtotal: roomTotal,
+        // priceSubtotal 使用现价总额（即顾客实际计费前的小计），coupon 为原价与现价差值
+        priceSubtotal: priceTotal,
         couponAmount: coupon,
         payableAmount: payable,
       });
@@ -446,7 +457,7 @@ export default function BookingScreen() {
                 房费 × {roomsCount} 间 × {nights} 晚
               </Text>
               <Text className="text-sm font-semibold text-neutral-900">
-                ¥{roomTotal.toFixed(2)}
+                ¥{originalTotal.toFixed(2)}
               </Text>
             </View>
             <View className="mt-2 flex-row items-center justify-between">
