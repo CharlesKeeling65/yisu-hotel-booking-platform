@@ -293,3 +293,10 @@ export async function fetchOrderBreakdown(orderId: string) {
   );
   return res.data ?? { items: [], discounts: [], total: 0 };
 }
+
+export async function cancelMobileOrder(orderId: string) {
+  const res = await getJson<any>(`/api/mobile/orders/${orderId}/cancel`, {
+    method: "PUT",
+  });
+  return res.data ?? null;
+}

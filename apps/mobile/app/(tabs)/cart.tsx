@@ -9,19 +9,25 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Modal,
-    Pressable,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fetchMobileOrders, payMobileOrder, type MobileOrder } from "@/lib/api";
+import {
+  cancelMobileOrder,
+  fetchMobileOrders,
+  payMobileOrder,
+  type MobileOrder,
+} from "@/lib/api";
 
 type StatusKey = "all" | "unpaid" | "paid" | "cancelled" | string;
 
@@ -36,10 +42,12 @@ function OrderCard({
   order,
   onPay,
   onView,
+  onCancel,
 }: {
   order: MobileOrder;
   onPay?: (o: MobileOrder) => void;
   onView?: (o: MobileOrder) => void;
+  onCancel?: (o: MobileOrder) => void;
 }) {
   const dateText =
     order.checkIn && order.checkOut
@@ -98,6 +106,29 @@ function OrderCard({
         >
           <Text style={{ color: "#374151", fontWeight: "600" }}>查看订单</Text>
         </Pressable>
+        {onCancel && order.status !== "cancelled" && (
+          <TouchableOpacity
+            onPress={() => {
+              console.log("cancel press onPress", order.id);
+              onCancel(order);
+            }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessible={true}
+            accessibilityRole="button"
+            style={{
+              backgroundColor: "#EF4444",
+              paddingVertical: 8,
+              paddingHorizontal: 14,
+              borderRadius: 8,
+              marginRight: 8,
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 10,
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "600" }}>取消订单</Text>
+          </TouchableOpacity>
+        )}
         {order.paymentStatus === "unpaid" && onPay && (
           <Pressable
             onPress={() => onPay(order)}
@@ -131,6 +162,9 @@ export default function OrdersScreen() {
   const [activeStatus, setActiveStatus] = useState<StatusKey>("all");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [confirmCancelVisible, setConfirmCancelVisible] = useState(false);
+  const [pendingCancelOrder, setPendingCancelOrder] =
+    useState<MobileOrder | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -256,6 +290,16 @@ export default function OrdersScreen() {
     }, 1000);
   };
 
+  const handleCancel = (order: MobileOrder) => {
+    console.log("handleCancel called", order?.id);
+    if (!customerId) {
+      Alert.alert("无法取消", "请先登录");
+      return;
+    }
+    setPendingCancelOrder(order);
+    setConfirmCancelVisible(true);
+  };
+
   const renderContent = () => {
     if (!customerId) {
       return (
@@ -301,6 +345,7 @@ export default function OrdersScreen() {
             onView={(o) =>
               router.push({ pathname: "/order/[id]", params: { id: o.id } })
             }
+            onCancel={(o) => handleCancel(o)}
           />
         )}
         contentContainerStyle={styles.listContent}
@@ -425,6 +470,87 @@ export default function OrdersScreen() {
                 <Text style={{ color: "#fff", fontWeight: "600" }}>
                   {processingPay ? "支付中..." : "确认支付"}
                 </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={confirmCancelVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmCancelVisible(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "rgba(0,0,0,0.4)",
+            padding: 24,
+          }}
+        >
+          <View
+            style={{
+              borderRadius: 12,
+              backgroundColor: "#fff",
+              padding: 16,
+              width: "100%",
+              maxWidth: 480,
+            }}
+          >
+            <Text
+              style={{ fontSize: 16, fontWeight: "700", textAlign: "center" }}
+            >
+              确认取消订单
+            </Text>
+            <Text style={{ marginTop: 12, color: "#6B7280", lineHeight: 20 }}>
+              确认要取消该订单吗？
+            </Text>
+            <View style={{ flexDirection: "row", marginTop: 16 }}>
+              <Pressable
+                onPress={() => {
+                  setConfirmCancelVisible(false);
+                  setPendingCancelOrder(null);
+                }}
+                style={{
+                  flex: 1,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: "#E5E7EB",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                  marginRight: 8,
+                }}
+              >
+                <Text style={{ color: "#374151" }}>取消</Text>
+              </Pressable>
+              <Pressable
+                onPress={async () => {
+                  if (!pendingCancelOrder) return;
+                  console.log("confirm cancel pressed", pendingCancelOrder.id);
+                  try {
+                    console.log("cancel start", pendingCancelOrder.id);
+                    const res = await cancelMobileOrder(pendingCancelOrder.id);
+                    console.log("cancel response", res);
+                    setConfirmCancelVisible(false);
+                    setPendingCancelOrder(null);
+                    await handleRefresh();
+                    Alert.alert("取消成功", "订单已取消");
+                  } catch (e: any) {
+                    console.error("cancel error", e);
+                    Alert.alert("取消失败", e?.message || String(e));
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  borderRadius: 8,
+                  backgroundColor: "#EF4444",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "600" }}>确认</Text>
               </Pressable>
             </View>
           </View>

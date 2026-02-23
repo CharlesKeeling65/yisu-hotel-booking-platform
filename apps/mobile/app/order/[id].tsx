@@ -267,75 +267,82 @@ export default function OrderDetail() {
             {order.hotelCity}
             {order.hotelAddress ? ` ${order.hotelAddress}` : ""}
           </Text>
-          
         </View>
       </View>
 
       <View style={{ backgroundColor: "#fff", marginTop: 8, padding: 16 }}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16, fontWeight: "600" }}>
-                {order.roomName} {order.roomsCount}间{order.nights}晚
-              </Text>
-              {(() => {
-                const raw = (order as any).raw;
-                let tags: string[] = [];
-                if (Array.isArray(raw?.remarkTags)) tags = raw.remarkTags;
-                else if (raw?.remark)
-                  tags = String(raw.remark)
-                    .split(",")
-                    .map((s: string) => s.trim())
-                    .filter(Boolean);
-                else if (Array.isArray((order as any).remarkTags))
-                  tags = (order as any).remarkTags;
-                else if ((order as any).remark)
-                  tags = String((order as any).remark)
-                    .split(",")
-                    .map((s: string) => s.trim())
-                    .filter(Boolean);
-                else if (order?.notes)
-                  tags = String(order.notes)
-                    .split(",")
-                    .map((s: string) => s.trim())
-                    .filter(Boolean);
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 16, fontWeight: "600" }}>
+              {order.roomName} {order.roomsCount}间{order.nights}晚
+            </Text>
+            {(() => {
+              const raw = (order as any).raw;
+              let tags: string[] = [];
+              if (Array.isArray(raw?.remarkTags)) tags = raw.remarkTags;
+              else if (raw?.remark)
+                tags = String(raw.remark)
+                  .split(",")
+                  .map((s: string) => s.trim())
+                  .filter(Boolean);
+              else if (Array.isArray((order as any).remarkTags))
+                tags = (order as any).remarkTags;
+              else if ((order as any).remark)
+                tags = String((order as any).remark)
+                  .split(",")
+                  .map((s: string) => s.trim())
+                  .filter(Boolean);
+              else if (order?.notes)
+                tags = String(order.notes)
+                  .split(",")
+                  .map((s: string) => s.trim())
+                  .filter(Boolean);
 
-                if (!tags || tags.length === 0) return null;
-                return (
-                  <View style={{ marginTop: 8, flexDirection: "row", flexWrap: "wrap" }}>
-                    {tags.map((t, idx) => (
-                      <View
-                        key={`${t}-${idx}`}
-                        style={{
-                          paddingHorizontal: 8,
-                          paddingVertical: 4,
-                          backgroundColor: "#F3F4F6",
-                          borderRadius: 6,
-                          borderWidth: 1,
-                          borderColor: "#E5E7EB",
-                          marginRight: 8,
-                          marginBottom: 8,
-                        }}
-                      >
-                        <Text style={{ fontSize: 12, color: "#374151" }}>{t}</Text>
-                      </View>
-                    ))}
-                  </View>
-                );
-              })()}
-            </View>
-            <Image
-              source={{
-                uri: `https://picsum.photos/seed/room_${order.id}/88/64`,
-              }}
-              style={{ width: 88, height: 64, borderRadius: 8 }}
-            />
+              if (!tags || tags.length === 0) return null;
+              return (
+                <View
+                  style={{
+                    marginTop: 8,
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {tags.map((t, idx) => (
+                    <View
+                      key={`${t}-${idx}`}
+                      style={{
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        backgroundColor: "#F3F4F6",
+                        borderRadius: 6,
+                        borderWidth: 1,
+                        borderColor: "#E5E7EB",
+                        marginRight: 8,
+                        marginBottom: 8,
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, color: "#374151" }}>
+                        {t}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              );
+            })()}
           </View>
+          <Image
+            source={{
+              uri: `https://picsum.photos/seed/room_${order.id}/88/64`,
+            }}
+            style={{ width: 88, height: 64, borderRadius: 8 }}
+          />
+        </View>
 
         <View
           style={{

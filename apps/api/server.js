@@ -2458,6 +2458,87 @@ app.post("/api/mobile/orders/:id/pay", async (req, res) => {
   }
 });
 
+// 移动端：取消订单
+app.put("/api/mobile/orders/:id/cancel", async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  if (!id) {
+    return res.status(400).json({ code: 400, msg: "缺少必要参数：订单 id" });
+  }
+  try {
+    const tokenCustomerId = await getCustomerIdFromReq(req);
+    if (!tokenCustomerId) {
+      return res.status(401).json({ code: 401, msg: "请先登录" });
+    }
+
+    // 使用事务：先读取订单并回滚房型 remain，再更新订单状态，保证并发安全
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // 锁定订单行
+      const [orderRows] = await conn.query(
+        "SELECT * FROM `orders` WHERE id = ? LIMIT 1 FOR UPDATE",
+        [id],
+      );
+      const orderRow = orderRows[0];
+      if (!orderRow) {
+        await conn.rollback();
+        conn.release();
+        return res.status(404).json({ code: 404, msg: "订单不存在" });
+      }
+      if (String(orderRow.customer_id) !== String(tokenCustomerId)) {
+        await conn.rollback();
+        conn.release();
+        return res.status(403).json({ code: 403, msg: "无权限取消该订单" });
+      }
+      if (orderRow.status === "cancelled") {
+        await conn.rollback();
+        conn.release();
+        return res.status(400).json({ code: 400, msg: "订单已取消" });
+      }
+
+      // 回滚房型库存：将 orders.rooms_count 加回到 Room.remain
+      const roomsCount = Number(orderRow.rooms_count || 0);
+      const roomId = String(orderRow.room_id);
+      if (roomsCount > 0 && roomId) {
+        await conn.query(
+          "UPDATE `Room` SET remain = COALESCE(remain,0) + ? WHERE id = ?",
+          [roomsCount, roomId],
+        );
+      }
+
+      // 更新订单状态为 cancelled
+      const now = formatDateForMySQL();
+      const [upd] = await conn.query(
+        "UPDATE `orders` SET status = ?, updated_at = ? WHERE id = ? AND customer_id = ?",
+        ["cancelled", now, id, tokenCustomerId],
+      );
+      if (!upd || !upd.affectedRows) {
+        await conn.rollback();
+        conn.release();
+        return res.status(500).json({ code: 500, msg: "取消订单失败" });
+      }
+
+      // 返回更新后的订单信息
+      const [rows] = await conn.query(
+        "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id WHERE o.id = ? LIMIT 1",
+        [id],
+      );
+      const updatedOrder = rows[0];
+
+      await conn.commit();
+      conn.release();
+      return res.json({ code: 200, data: mapMobileOrderRow(updatedOrder) });
+    } catch (err) {
+      await conn.rollback();
+      conn.release();
+      throw err;
+    }
+  } catch (e) {
+    return res.status(500).json({ code: 500, msg: e.message });
+  }
+});
+
 // 获取订单费用明细（按房价、晚数、优惠项汇总）
 app.get("/api/mobile/orders/:id/breakdown", async (req, res) => {
   const id = String(req.params.id || "").trim();
