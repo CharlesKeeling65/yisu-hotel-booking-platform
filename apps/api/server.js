@@ -2226,7 +2226,15 @@ function mapMobileOrderRow(row) {
     hotelId: row.hotel_id,
     roomId: row.room_id,
     status: row.status,
-    statusLabel: statusTextMap[row.status] || row.status || "",
+    // 统一前端主要展示的状态为：未支付 / 已支付 / 已取消
+    // 优先依据 payment_status 决定未支付/已支付；若订单状态为 cancelled 则显示已取消
+    statusLabel:
+      (row.payment_status === "unpaid" && "未支付") ||
+      (row.status === "cancelled" && "已取消") ||
+      (row.payment_status === "paid" && "已支付") ||
+      statusTextMap[row.status] ||
+      row.status ||
+      "",
     paymentStatus: row.payment_status,
     paymentStatusLabel:
       payStatusTextMap[row.payment_status] || row.payment_status || "",
@@ -2464,8 +2472,18 @@ app.get("/api/mobile/orders", async (req, res) => {
   const where = ["o.customer_id = ?"];
   const params = [customerId];
   if (status && status !== "all") {
-    where.push("o.status = ?");
-    params.push(status);
+    // 支持按 payment_status 过滤（unpaid/paid/refunded）或按订单状态过滤（cancelled 等）
+    if (status === "unpaid" || status === "paid" || status === "refunded") {
+      where.push("o.payment_status = ?");
+      params.push(status);
+    } else if (status === "cancelled") {
+      where.push("o.status = ?");
+      params.push("cancelled");
+    } else {
+      // 兼容旧的 status 值（pending/upcoming/completed 等）
+      where.push("o.status = ?");
+      params.push(status);
+    }
   }
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const offset = (page - 1) * pageSize;
@@ -2478,6 +2496,20 @@ app.get("/api/mobile/orders", async (req, res) => {
         " ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
       listParams.concat([pageSize, offset]),
     );
+    if (process.env.NODE_ENV !== "production") {
+      try {
+        console.log(
+          "[orders:list] where=",
+          whereSql,
+          "params=",
+          listParams,
+          "limit=",
+          pageSize,
+          "offset=",
+          offset,
+        );
+      } catch (_e) {}
+    }
 
     // 查询总数
     const [countRows] = await pool.query(

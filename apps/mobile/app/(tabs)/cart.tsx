@@ -23,13 +23,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { fetchMobileOrders, payMobileOrder, type MobileOrder } from "@/lib/api";
 
-type StatusKey = "all" | "pending" | "upcoming" | "completed";
+type StatusKey = "all" | "unpaid" | "paid" | "cancelled" | string;
 
 const STATUS_TABS: Array<{ key: StatusKey; label: string }> = [
   { key: "all", label: "全部" },
-  { key: "pending", label: "待付款" },
-  { key: "upcoming", label: "未出行" },
-  { key: "completed", label: "待点评" },
+  { key: "unpaid", label: "未支付" },
+  { key: "paid", label: "已支付" },
+  { key: "cancelled", label: "已取消" },
 ];
 
 function OrderCard({
@@ -71,7 +71,8 @@ function OrderCard({
       </View>
       <View style={styles.footerRow}>
         <Text style={styles.tipText}>
-          {order.paymentStatus === "unpaid" ? "延迟付款" : "已支付"}
+          {order.statusLabel ||
+            (order.paymentStatus === "unpaid" ? "未支付" : "已支付")}
         </Text>
         <Text style={styles.amountText}>{amountText}</Text>
       </View>

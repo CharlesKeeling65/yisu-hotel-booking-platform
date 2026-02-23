@@ -264,13 +264,13 @@ export async function payMobileOrder(orderId: string, customerId: string) {
 }
 
 export async function fetchMobileOrders(params: {
-  customerId: string;
+  customerId?: string; // optional, server uses token
   status?: string;
   page?: number;
   pageSize?: number;
 }) {
   const search = new URLSearchParams();
-  search.set("customerId", params.customerId);
+  // Do not send customerId from client; server will resolve from Authorization token.
   if (params.status) search.set("status", params.status);
   if (params.page) search.set("page", String(params.page));
   if (params.pageSize) search.set("pageSize", String(params.pageSize));
