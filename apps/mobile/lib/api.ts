@@ -286,3 +286,10 @@ export async function fetchMobileOrders(params: {
     hasMore: Boolean(res.hasMore),
   };
 }
+
+export async function fetchOrderBreakdown(orderId: string) {
+  const res = await getJson<{ items: any[]; discounts: any[]; total: number }>(
+    `/api/mobile/orders/${orderId}/breakdown`,
+  );
+  return res.data ?? { items: [], discounts: [], total: 0 };
+}

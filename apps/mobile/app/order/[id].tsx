@@ -1,4 +1,4 @@
-import { fetchMobileOrders, payMobileOrder, type MobileOrder } from "@/lib/api";
+import { fetchMobileOrders, fetchOrderBreakdown, payMobileOrder, type MobileOrder } from "@/lib/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -24,6 +24,8 @@ export default function OrderDetail() {
   const [loading, setLoading] = useState(true);
   const [payVisible, setPayVisible] = useState(false);
   const [processingPay, setProcessingPay] = useState(false);
+  const [breakdownVisible, setBreakdownVisible] = useState(false);
+  const [breakdown, setBreakdown] = useState<any | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -146,7 +148,18 @@ export default function OrderDetail() {
           </Text>
         </Text>
         <View style={{ marginTop: 8, flexDirection: "row" }}>
-          <Pressable onPress={() => {}} style={{ marginRight: 16 }}>
+          <Pressable
+            onPress={async () => {
+              try {
+                const data = await fetchOrderBreakdown(order.id);
+                setBreakdown(data);
+                setBreakdownVisible(true);
+              } catch (e: any) {
+                Alert.alert("获取费用明细失败", e?.message || String(e));
+              }
+            }}
+            style={{ marginRight: 16 }}
+          >
             <Text style={{ color: "#1890FF" }}>费用明细</Text>
           </Pressable>
           <Pressable onPress={() => {}}>
@@ -366,6 +379,40 @@ export default function OrderDetail() {
                 </Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={breakdownVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBreakdownVisible(false)}
+      >
+        <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.4)" }}>
+          <View style={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, backgroundColor: "#fff", padding: 16, maxHeight: "70%" }}>
+            <Text style={{ fontSize: 16, fontWeight: "700", textAlign: "center" }}>费用明细</Text>
+            <ScrollView style={{ marginTop: 12 }}>
+              {breakdown?.items?.map((it: any, idx: number) => (
+                <View key={idx} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 8 }}>
+                  <Text>{it.label}</Text>
+                  <Text>¥{Number(it.amount).toFixed(2)}</Text>
+                </View>
+              ))}
+              {breakdown?.discounts?.map((d: any, idx: number) => (
+                <View key={`d${idx}`} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 8 }}>
+                  <Text style={{ color: "#6B7280" }}>{d.label}</Text>
+                  <Text style={{ color: "#6B7280" }}>¥{Number(d.amount).toFixed(2)}</Text>
+                </View>
+              ))}
+              <View style={{ height: 8 }} />
+              <View style={{ borderTopWidth: 1, borderTopColor: "#F3F4F6", paddingTop: 12, flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={{ fontWeight: "700" }}>总计</Text>
+                <Text style={{ color: "#1890FF", fontWeight: "700" }}>¥{Number(breakdown?.total || 0).toFixed(2)}</Text>
+              </View>
+            </ScrollView>
+            <Pressable onPress={() => setBreakdownVisible(false)} style={{ marginTop: 12, alignItems: "center", paddingVertical: 12, borderRadius: 8, backgroundColor: "#F3F4F6" }}>
+              <Text>关闭</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>

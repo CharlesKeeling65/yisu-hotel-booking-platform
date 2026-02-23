@@ -9,9 +9,9 @@
  * - 新增一个页面时，先在 app 目录创建文件，再根据是否需要显式控制 header 在这里配置 Screen options。
  */
 import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
+    DarkTheme,
+    DefaultTheme,
+    ThemeProvider,
 } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -52,6 +52,13 @@ export default function RootLayout() {
           options={{
             headerShown: false,
             title: "预订",
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="order/[id]"
+          options={{
+            title: "我的订单",
             animation: "slide_from_right",
           }}
         />

@@ -2458,6 +2458,77 @@ app.post("/api/mobile/orders/:id/pay", async (req, res) => {
   }
 });
 
+// 获取订单费用明细（按房价、晚数、优惠项汇总）
+app.get("/api/mobile/orders/:id/breakdown", async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  if (!id) return res.status(400).json({ code: 400, msg: "缺少订单 id" });
+  try {
+    const tokenCustomerId = await getCustomerIdFromReq(req);
+    if (!tokenCustomerId) return res.status(401).json({ code: 401, msg: "请先登录" });
+
+    const [rows] = await pool.query(
+      "SELECT o.*, r.price AS room_price, r.original_price AS room_original_price FROM `orders` o LEFT JOIN `Room` r ON o.room_id = r.id WHERE o.id = ? LIMIT 1",
+      [id],
+    );
+    const order = rows[0];
+    if (!order) return res.status(404).json({ code: 404, msg: "订单不存在" });
+    if (String(order.customer_id) !== String(tokenCustomerId))
+      return res.status(403).json({ code: 403, msg: "无权限查看该订单" });
+
+    const checkIn = toDateOnly(order.check_in) || null;
+    const checkOut = toDateOnly(order.check_out) || null;
+    const nights = Number(order.nights || 1);
+    const unit = Number(order.room_price || order.price_subtotal / Math.max(1, nights) || 0);
+    const originalUnit = Number(order.room_original_price || 0);
+
+    // 聚合为一行房费（显示房价总额），并从数据库读取折扣（如 coupon_amount）
+    const roomsCount = Number(order.rooms_count || 1);
+    const nightsCount = Number(order.nights || nights || 1);
+    const subtotal = Number(order.price_subtotal || 0);
+    const unitPriceComputed = Number(order.room_price || 0);
+
+    const items = [];
+    // 房费：显示为 "房费 × {rooms}间 × {nights}晚"，金额来自 price_subtotal
+    items.push({
+      label: `房费 × ${roomsCount}间 × ${nightsCount}晚`,
+      unitPrice: unitPriceComputed,
+      amount: subtotal,
+    });
+
+    const discounts = [];
+    // 将数据库中的 coupon_amount 映射为限时优惠（若有）
+    if (order.coupon_amount && Number(order.coupon_amount) !== 0) {
+      discounts.push({ label: "限时优惠", amount: -Number(order.coupon_amount) });
+    }
+
+    const total = Number(order.payable_amount || 0);
+    // 折扣合计（discounts 中的金额通常为负数）
+    const discountsSum = (discounts || []).reduce((s, d) => s + Number(d.amount || 0), 0);
+    // 要求：第一行价格等于 总计 + 限时优惠（注意 discounts 中为负值），
+    // 等价于：items[0].amount = total - discountsSum
+    if (items.length > 0) {
+      items[0].amount = Number((total - discountsSum) || 0);
+      // 若 unitPrice 未提供且有 nights/rooms，则尝试计算每间每晚单价
+      try {
+        const denom = Math.max(1, roomsCount * nightsCount);
+        items[0].unitPrice = Number((items[0].amount / denom) || items[0].unitPrice || 0);
+      } catch (_e) {}
+    }
+
+    return res.json({
+      code: 200,
+      data: {
+        items,
+        discounts,
+        total,
+        currency: order.currency || "CNY",
+      },
+    });
+  } catch (e) {
+    return res.status(500).json({ code: 500, msg: e.message });
+  }
+});
+
 app.get("/api/mobile/orders", async (req, res) => {
   // 强制从 token 中解析 customer_id，拒绝客户端传入任意 customerId
   const tokenCustomerId = await getCustomerIdFromReq(req);

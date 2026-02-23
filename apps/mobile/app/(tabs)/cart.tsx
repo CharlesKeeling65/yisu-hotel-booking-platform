@@ -54,11 +54,10 @@ function OrderCard({
   return (
     <View style={styles.card}>
       <View style={styles.cardHeaderRow}>
-        <Text style={styles.cardType}>酒店</Text>
         <Text style={[styles.statusTag]}>{order.statusLabel}</Text>
       </View>
       <Text style={styles.hotelName} numberOfLines={2}>
-        {order.hotelName || "酒店名称加载中"}
+        {order.hotelName || ""}
       </Text>
       <Text style={styles.hotelAddr} numberOfLines={1}>
         {order.hotelCity || order.hotelCounty
