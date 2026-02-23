@@ -1,4 +1,4 @@
-import { customerRegister, customerLogin } from "@/lib/api";
+import { customerLogin, customerRegister } from "@/lib/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -54,7 +54,7 @@ export default function RegisterScreen() {
       // 自动使用刚注册的账号登录
       try {
         const loginRes = await customerLogin(phone.trim(), password);
-      if (loginRes && loginRes.token && loginRes.customer) {
+        if (loginRes && loginRes.token && loginRes.customer) {
           await AsyncStorage.setItem("customer_token", String(loginRes.token));
           await AsyncStorage.setItem(
             "customer_info",

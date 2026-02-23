@@ -69,6 +69,8 @@ export default function BookingScreen() {
   const [successCountdown, setSuccessCountdown] = useState(5);
   const successTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [confirmLoginVisible, setConfirmLoginVisible] = useState(false);
+  const [validationModalVisible, setValidationModalVisible] = useState(false);
+  const [validationModalMsg, setValidationModalMsg] = useState("");
 
   const [roomsCount, setRoomsCount] = useState(Math.max(1, Number(rooms || 1)));
   const [datePickerVisible, setDatePickerVisible] = useState(false);
@@ -151,11 +153,11 @@ export default function BookingScreen() {
       Alert.alert("请输入手机号", "请填写预订人手机号");
       return;
     }
-    // 简单手机号格式校验（中国手机号 11 位）
+    // 手机号格式校验（中国手机号 11 位，1 开头）
     setPhoneError("");
     const onlyDigits = guestPhone.replace(/\D/g, "");
-    if (onlyDigits.length < 7) {
-      setPhoneError("手机号格式错误，请输入有效手机号");
+    if (!/^1\d{10}$/.test(onlyDigits)) {
+      setPhoneError("手机号格式不正确");
       return;
     }
 
@@ -529,7 +531,25 @@ export default function BookingScreen() {
     !!room &&
     guestName.trim().length > 0 &&
     guestPhone.trim().length > 0 &&
+    /^1\d{10}$/.test(String(guestPhone).replace(/\D/g, "")) &&
     (room?.remain == null || room?.remain > 0);
+  // Provide detailed validation result for disabled reason
+  const validateBooking = () => {
+    if (loading) return { ok: false, reason: "正在加载，请稍后再试" };
+    if (!hotel) return { ok: false, reason: "酒店信息缺失" };
+    if (!room) return { ok: false, reason: "房型信息缺失" };
+    if (!guestName.trim()) return { ok: false, reason: "请填写预订人姓名" };
+    const onlyDigits = String(guestPhone || "").replace(/\D/g, "");
+    if (!guestPhone.trim()) return { ok: false, reason: "请填写手机号" };
+    if (!/^1\d{10}$/.test(onlyDigits))
+      return { ok: false, reason: "手机号格式不正确" };
+    if (typeof room?.remain === "number" && room.remain <= 0)
+      return { ok: false, reason: "该房型已售罄" };
+    return { ok: true, reason: "" };
+  };
+
+  const bookingValidation = validateBooking();
+  const finalCanPay = bookingValidation.ok;
 
   return (
     <View className="flex-1 bg-neutral-50">
@@ -667,22 +687,79 @@ export default function BookingScreen() {
             ¥{payable.toFixed(2)}
           </Text>
         </View>
+        <View style={{ flex: 1 }} />
         <Pressable
-          disabled={!canPay}
-          onPress={handlePay}
+          onPress={() => {
+            if (!bookingValidation.ok) {
+              setValidationModalMsg(bookingValidation.reason || "请检查填写项");
+              setValidationModalVisible(true);
+              return;
+            }
+            handlePay();
+          }}
           className={`rounded-xl px-5 py-3 ${
-            canPay ? "bg-[#2B7FC7]" : "bg-slate-200"
+            finalCanPay ? "bg-[#2B7FC7]" : "bg-slate-200"
           }`}
         >
           <Text
             className={`text-base font-semibold ${
-              canPay ? "text-white" : "text-slate-500"
+              finalCanPay ? "text-white" : "text-slate-500"
             }`}
           >
             去支付
           </Text>
         </Pressable>
       </View>
+      <Modal
+        visible={validationModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setValidationModalVisible(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "rgba(0,0,0,0.4)",
+            padding: 24,
+          }}
+        >
+          <View
+            style={{
+              borderRadius: 12,
+              backgroundColor: "#fff",
+              padding: 16,
+              width: "100%",
+              maxWidth: 480,
+            }}
+          >
+            <Text
+              style={{ fontSize: 16, fontWeight: "700", textAlign: "center" }}
+            >
+              填写信息有误
+            </Text>
+            <Text style={{ marginTop: 12, color: "#6B7280", lineHeight: 20 }}>
+              {validationModalMsg}
+            </Text>
+            <View style={{ flexDirection: "row", marginTop: 16 }}>
+              <Pressable
+                onPress={() => setValidationModalVisible(false)}
+                style={{
+                  flex: 1,
+                  borderRadius: 8,
+                  backgroundColor: "#1890FF",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "600" }}>知道了</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={confirmLoginVisible}
         transparent
