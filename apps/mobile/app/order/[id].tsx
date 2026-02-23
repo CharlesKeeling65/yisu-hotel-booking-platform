@@ -182,12 +182,26 @@ export default function OrderDetail() {
             alignItems: "center",
           }}
         >
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, fontWeight: "600" }}>
+          <Pressable
+            style={{ flex: 1 }}
+            onPress={() => {
+              if (!order?.hotelId) return;
+              router.push({
+                pathname: "/hotel/[id]",
+                params: {
+                  id: String(order.hotelId),
+                  checkIn: String(order.checkIn || ""),
+                  checkOut: String(order.checkOut || ""),
+                  from: "order",
+                },
+              });
+            }}
+          >
+            <Text style={{ fontSize: 16, fontWeight: "600", color: "#111827" }}>
               {order.hotelName}
             </Text>
-            <Text style={{ marginTop: 6, color: "#6B7280" }}>酒店详情</Text>
-          </View>
+            <Text style={{ marginTop: 6, color: "#1890FF" }}>酒店详情</Text>
+          </Pressable>
           <Image
             source={{
               uri: order.hotelName
@@ -253,37 +267,75 @@ export default function OrderDetail() {
             {order.hotelCity}
             {order.hotelAddress ? ` ${order.hotelAddress}` : ""}
           </Text>
-          <Pressable style={{ marginTop: 8 }}>
-            <Text style={{ color: "#1890FF" }}>地图/导航</Text>
-          </Pressable>
+          
         </View>
       </View>
 
       <View style={{ backgroundColor: "#fff", marginTop: 8, padding: 16 }}>
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, fontWeight: "600" }}>
-              {order.roomName} {order.roomsCount}间{order.nights}晚
-            </Text>
-            <Pressable>
-              <Text style={{ color: "#1890FF", marginTop: 6 }}>
-                客房设施及加床
-              </Text>
-            </Pressable>
-          </View>
-          <Image
-            source={{
-              uri: `https://picsum.photos/seed/room_${order.id}/88/64`,
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
             }}
-            style={{ width: 88, height: 64, borderRadius: 8 }}
-          />
-        </View>
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: "600" }}>
+                {order.roomName} {order.roomsCount}间{order.nights}晚
+              </Text>
+              {(() => {
+                const raw = (order as any).raw;
+                let tags: string[] = [];
+                if (Array.isArray(raw?.remarkTags)) tags = raw.remarkTags;
+                else if (raw?.remark)
+                  tags = String(raw.remark)
+                    .split(",")
+                    .map((s: string) => s.trim())
+                    .filter(Boolean);
+                else if (Array.isArray((order as any).remarkTags))
+                  tags = (order as any).remarkTags;
+                else if ((order as any).remark)
+                  tags = String((order as any).remark)
+                    .split(",")
+                    .map((s: string) => s.trim())
+                    .filter(Boolean);
+                else if (order?.notes)
+                  tags = String(order.notes)
+                    .split(",")
+                    .map((s: string) => s.trim())
+                    .filter(Boolean);
+
+                if (!tags || tags.length === 0) return null;
+                return (
+                  <View style={{ marginTop: 8, flexDirection: "row", flexWrap: "wrap" }}>
+                    {tags.map((t, idx) => (
+                      <View
+                        key={`${t}-${idx}`}
+                        style={{
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          backgroundColor: "#F3F4F6",
+                          borderRadius: 6,
+                          borderWidth: 1,
+                          borderColor: "#E5E7EB",
+                          marginRight: 8,
+                          marginBottom: 8,
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, color: "#374151" }}>{t}</Text>
+                      </View>
+                    ))}
+                  </View>
+                );
+              })()}
+            </View>
+            <Image
+              source={{
+                uri: `https://picsum.photos/seed/room_${order.id}/88/64`,
+              }}
+              style={{ width: 88, height: 64, borderRadius: 8 }}
+            />
+          </View>
 
         <View
           style={{
