@@ -1,16 +1,21 @@
-import { fetchMobileOrders, fetchOrderBreakdown, payMobileOrder, type MobileOrder } from "@/lib/api";
+import {
+  fetchMobileOrders,
+  fetchOrderBreakdown,
+  payMobileOrder,
+  type MobileOrder,
+} from "@/lib/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    Modal,
-    Pressable,
-    ScrollView,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -26,6 +31,7 @@ export default function OrderDetail() {
   const [processingPay, setProcessingPay] = useState(false);
   const [breakdownVisible, setBreakdownVisible] = useState(false);
   const [breakdown, setBreakdown] = useState<any | null>(null);
+  const [cancelVisible, setCancelVisible] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -162,7 +168,7 @@ export default function OrderDetail() {
           >
             <Text style={{ color: "#1890FF" }}>费用明细</Text>
           </Pressable>
-          <Pressable onPress={() => {}}>
+          <Pressable onPress={() => setCancelVisible(true)}>
             <Text style={{ color: "#1890FF" }}>取消政策</Text>
           </Pressable>
         </View>
@@ -388,30 +394,157 @@ export default function OrderDetail() {
         animationType="slide"
         onRequestClose={() => setBreakdownVisible(false)}
       >
-        <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.4)" }}>
-          <View style={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, backgroundColor: "#fff", padding: 16, maxHeight: "70%" }}>
-            <Text style={{ fontSize: 16, fontWeight: "700", textAlign: "center" }}>费用明细</Text>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "flex-end",
+            backgroundColor: "rgba(0,0,0,0.4)",
+          }}
+        >
+          <View
+            style={{
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              backgroundColor: "#fff",
+              padding: 16,
+              maxHeight: "70%",
+            }}
+          >
+            <Text
+              style={{ fontSize: 16, fontWeight: "700", textAlign: "center" }}
+            >
+              费用明细
+            </Text>
             <ScrollView style={{ marginTop: 12 }}>
               {breakdown?.items?.map((it: any, idx: number) => (
-                <View key={idx} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 8 }}>
+                <View
+                  key={idx}
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    paddingVertical: 8,
+                  }}
+                >
                   <Text>{it.label}</Text>
                   <Text>¥{Number(it.amount).toFixed(2)}</Text>
                 </View>
               ))}
               {breakdown?.discounts?.map((d: any, idx: number) => (
-                <View key={`d${idx}`} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 8 }}>
+                <View
+                  key={`d${idx}`}
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    paddingVertical: 8,
+                  }}
+                >
                   <Text style={{ color: "#6B7280" }}>{d.label}</Text>
-                  <Text style={{ color: "#6B7280" }}>¥{Number(d.amount).toFixed(2)}</Text>
+                  <Text style={{ color: "#6B7280" }}>
+                    ¥{Number(d.amount).toFixed(2)}
+                  </Text>
                 </View>
               ))}
               <View style={{ height: 8 }} />
-              <View style={{ borderTopWidth: 1, borderTopColor: "#F3F4F6", paddingTop: 12, flexDirection: "row", justifyContent: "space-between" }}>
+              <View
+                style={{
+                  borderTopWidth: 1,
+                  borderTopColor: "#F3F4F6",
+                  paddingTop: 12,
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                }}
+              >
                 <Text style={{ fontWeight: "700" }}>总计</Text>
-                <Text style={{ color: "#1890FF", fontWeight: "700" }}>¥{Number(breakdown?.total || 0).toFixed(2)}</Text>
+                <Text style={{ color: "#1890FF", fontWeight: "700" }}>
+                  ¥{Number(breakdown?.total || 0).toFixed(2)}
+                </Text>
               </View>
             </ScrollView>
-            <Pressable onPress={() => setBreakdownVisible(false)} style={{ marginTop: 12, alignItems: "center", paddingVertical: 12, borderRadius: 8, backgroundColor: "#F3F4F6" }}>
-              <Text>关闭</Text>
+            <Pressable
+              onPress={() => setBreakdownVisible(false)}
+              style={{
+                position: "absolute",
+                top: 12,
+                right: 12,
+                width: 36,
+                height: 36,
+                borderRadius: 6,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#EF4444",
+              }}
+              accessibilityLabel="关闭"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text
+                style={{
+                  fontSize: 18,
+                  lineHeight: 18,
+                  color: "#FFFFFF",
+                  fontWeight: "700",
+                }}
+              >
+                ×
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={cancelVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCancelVisible(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            backgroundColor: "rgba(0,0,0,0.4)",
+            padding: 24,
+          }}
+        >
+          <View
+            style={{
+              borderRadius: 12,
+              backgroundColor: "#fff",
+              padding: 16,
+            }}
+          >
+            <Text
+              style={{ fontSize: 16, fontWeight: "700", textAlign: "center" }}
+            >
+              取消政策
+            </Text>
+            <Text style={{ marginTop: 12, color: "#6B7280", lineHeight: 20 }}>
+              {order?.notes || "请联系商家确认该房型是否可取消！"}
+            </Text>
+            <Pressable
+              onPress={() => setCancelVisible(false)}
+              style={{
+                position: "absolute",
+                top: 12,
+                right: 12,
+                width: 36,
+                height: 36,
+                borderRadius: 6,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#EF4444",
+              }}
+              accessibilityLabel="关闭"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text
+                style={{
+                  fontSize: 18,
+                  lineHeight: 18,
+                  color: "#FFFFFF",
+                  fontWeight: "700",
+                }}
+              >
+                ×
+              </Text>
             </Pressable>
           </View>
         </View>
