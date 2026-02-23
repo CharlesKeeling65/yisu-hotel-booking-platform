@@ -1,9 +1,4 @@
-/**
- * 首页搜索面板（完整版本）
- * 职责：
- * - 承载酒店搜索的主要输入项
- * - 通过 props 回调把交互事件上抛给页面容器处理
- */
+
 import { IconSymbol } from '@/components/ui/icon-symbol'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import { stripCityCountySuffix } from '@/lib/location-utils'
@@ -32,11 +27,10 @@ type Props = {
 }
 
 const formatMonthDay = (dateString: string) => {
-  // UI 只显示“月/日”，避免输入区信息密度过高
   const date = new Date(dateString)
   if (Number.isNaN(date.getTime())) return dateString
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
+  const month = date.getMonth() + 1
+  const day = date.getDate()
   return `${month}月${day}日`
 }
 
@@ -57,92 +51,123 @@ const getDateMetaLabel = (dateString: string) => {
 export default function SearchPanel(props: Props) {
   const { city, location, checkInDate, checkOutDate, nights, rooms, adults, childCount, starLabel, onCityPress, onLocationPress, onLocationClearPress, onLocatePress, onDatePress, onGuestPress, onStarPress, onStarClearPress, onSearch, quickTags = [], onTagPress } = props
 
-  const guestSummary = `${rooms}间房 ${adults}成人 ${childCount}儿童`
+  const guestSummary = `${rooms}间 ${adults}成人 ${childCount ? childCount + '儿童' : ''}`
   const cityLabel = stripCityCountySuffix(city)
 
   return (
-    <View className="rounded-3xl border border-slate-100 bg-white p-4 shadow-lg">
-      <View className="flex-row items-center rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
-        <Pressable className="shrink-0 flex-row items-center justify-center pr-2" onPress={onCityPress}>
-          <Text className="text-center text-[15px] font-semibold text-slate-900">{cityLabel || city}</Text>
-          <Text className="ml-1 text-xs text-slate-400">▼</Text>
+    <View className="rounded-[20px] bg-white px-5 py-5 shadow-sm shadow-slate-200/50">
+      
+      {/* 1. 目的地与搜索栏 */}
+      <View className="flex-row items-center border-b border-slate-100 pb-3.5">
+        <Pressable className="flex-row items-center pr-3" onPress={onCityPress}>
+          <Text className="text-[18px] font-bold text-slate-900">{cityLabel || city}</Text>
+          <Text className="ml-1 text-[10px] text-slate-400">▼</Text>
         </Pressable>
-        <Text className="mx-2 text-xs text-slate-300">|</Text>
-        <Pressable className="min-w-0 flex-1 py-2" onPress={onLocationPress}>
-          <Text numberOfLines={1} className={`text-left text-[15px] ${location ? 'font-medium text-slate-700' : 'text-slate-400'}`}>
-            {location || '位置/商圈/酒店'}
+        
+        <View className="mx-2 h-3.5 w-[1px] bg-slate-200" />
+        
+        <Pressable className="min-w-0 flex-1 flex-row items-center pl-2" onPress={onLocationPress}>
+          <Text numberOfLines={1} className={`flex-1 text-[14px] ${location ? 'font-medium text-slate-800' : 'text-slate-400'}`}>
+            {location || '位置/商圈/酒店名'}
           </Text>
+          {location ? (
+            <Pressable onPress={onLocationClearPress} className="ml-2 h-4 w-4 items-center justify-center rounded-full bg-slate-200/80">
+              <Text className="text-[9px] font-bold text-slate-500">×</Text>
+            </Pressable>
+          ) : null}
         </Pressable>
-        {location ? (
-          <Pressable onPress={onLocationClearPress} className="ml-2 h-7 w-7 items-center justify-center rounded-full bg-slate-200">
-            <Text className="text-xs text-slate-500">×</Text>
-          </Pressable>
-        ) : null}
-        <Pressable onPress={onLocatePress} className="ml-2 h-9 w-9 items-center justify-center rounded-full bg-[#E6F4FF]">
-          <IconSymbol size={18} name="location.fill" color="#1890FF" />
+
+        <Pressable onPress={onLocatePress} className="ml-2 flex-row items-center justify-center rounded-full bg-[#F0F7FF] px-2 py-1.5">
+          <IconSymbol size={15} name="location.fill" color="#1890FF" />
         </Pressable>
       </View>
 
-      <Pressable className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3" onPress={onDatePress}>
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-[11px] uppercase text-slate-400">入住日期</Text>
-            <View className="mt-1.5 flex-row items-center">
-              <Text className="text-[15px] font-semibold text-slate-900">{formatMonthDay(checkInDate)}</Text>
-              <Text className="ml-1 text-xs text-slate-500">{getDateMetaLabel(checkInDate)}</Text>
-              <Text className="mx-2 text-[12px] font-medium text-slate-400">-</Text>
-              <Text className="text-[15px] font-semibold text-slate-900">{formatMonthDay(checkOutDate)}</Text>
-              <Text className="ml-1 text-xs text-slate-500">{getDateMetaLabel(checkOutDate)}</Text>
-            </View>
+      {/* 2. 日期选择 */}
+      <Pressable className="flex-row items-center justify-between border-b border-slate-100 py-3.5" onPress={onDatePress}>
+        {/* 左侧：入住 */}
+        <View className="flex-1">
+          <Text className="mb-0.5 text-[10px] text-slate-400">入住日期</Text>
+          <View className="flex-row items-baseline gap-1.5">
+            <Text className="text-[18px] font-bold text-slate-900">{formatMonthDay(checkInDate)}</Text>
+            <Text className="text-[11px] font-medium text-slate-500">{getDateMetaLabel(checkInDate)}</Text>
           </View>
-          <Text className="mr-1 text-xs font-semibold text-[#1890FF]">共{nights}晚</Text>
+        </View>
+
+        {/* 中间：晚数胶囊 */}
+        <View className="px-2">
+          <View className="items-center justify-center rounded-full border border-slate-200/60 bg-slate-50 px-2.5 py-0.5">
+            <Text className="text-[10px] font-medium text-slate-500">共 {nights} 晚</Text>
+          </View>
+        </View>
+
+        {/* 右侧：离店 */}
+        <View className="flex-1 items-end">
+          <Text className="mb-0.5 text-[10px] text-slate-400">离店日期</Text>
+          <View className="flex-row items-baseline gap-1.5">
+            <Text className="text-[11px] font-medium text-slate-500">{getDateMetaLabel(checkOutDate)}</Text>
+            <Text className="text-[18px] font-bold text-slate-900">{formatMonthDay(checkOutDate)}</Text>
+          </View>
         </View>
       </Pressable>
 
-      <View className="mt-3 flex-row items-center rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
-        <Pressable className="shrink-0 flex-row items-center justify-center pr-2" onPress={onGuestPress}>
-          <Text className="text-center text-[15px] font-semibold text-slate-900">{guestSummary}</Text>
-          <Text className="ml-1 text-xs text-slate-400">▼</Text>
+      {/* 3. 人数与星级价格 */}
+      <View className="flex-row items-center border-b border-slate-50 py-3.5">
+        <Pressable className="flex-1 flex-row items-center justify-between pr-3" onPress={onGuestPress}>
+          <View>
+            <Text className="mb-0.5 text-[10px] text-slate-400">住客与房型</Text>
+            <Text className="text-[15px] font-bold text-slate-900">{guestSummary}</Text>
+          </View>
+          <Text className="text-[10px] text-slate-300">▼</Text>
         </Pressable>
-        <Text className="mx-2 text-xs text-slate-300">|</Text>
-        <Pressable className="min-w-0 flex-1 py-2" onPress={onStarPress}>
-          <Text numberOfLines={1} className={`text-left text-[14px] ${starLabel ? 'text-slate-700' : 'text-slate-400'}`}>
-            {starLabel || '价格/星级'}
-          </Text>
+
+        <View className="h-6 w-[1px] bg-slate-100" />
+
+        <Pressable className="flex-1 flex-row items-center justify-between pl-4" onPress={onStarPress}>
+          <View className="flex-1 pr-2">
+            <Text className="mb-0.5 text-[10px] text-slate-400">价格/星级</Text>
+            <Text numberOfLines={1} className={`text-[15px] font-bold ${starLabel && starLabel !== '价格/星级' ? 'text-[#1890FF]' : 'text-slate-900'}`}>
+              {starLabel || '不限'}
+            </Text>
+          </View>
+          {starLabel && starLabel !== '价格/星级' ? (
+            <Pressable onPress={onStarClearPress} className="h-4 w-4 items-center justify-center rounded-full bg-slate-200/80">
+              <Text className="text-[9px] font-bold text-slate-500">×</Text>
+            </Pressable>
+          ) : (
+             <Text className="text-[10px] text-slate-300">▼</Text>
+          )}
         </Pressable>
-        {starLabel && starLabel !== '价格/星级' ? (
-          <Pressable onPress={onStarClearPress} className="ml-2 h-7 w-7 items-center justify-center rounded-full bg-slate-200">
-            <Text className="text-xs text-slate-500">×</Text>
-          </Pressable>
-        ) : null}
       </View>
 
+      {/* 4. 快捷标签 */}
       {quickTags.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          className="mt-3"
-          contentContainerStyle={{ paddingRight: 4 }}
+          className="mt-2"
+          contentContainerStyle={{ paddingRight: 4, paddingBottom: 4 }}
         >
           <View className="flex-row items-center">
-            {quickTags.map((tag) => {
-              return (
-                <Pressable
-                  key={tag}
-                  className="mr-2 rounded-full bg-[#F5F7FB] px-3 py-2"
-                  onPress={() => onTagPress?.(tag)}
-                >
-                  <Text className="text-xs text-slate-600">{tag}</Text>
-                </Pressable>
-              )
-            })}
+            {quickTags.map((tag) => (
+              <Pressable
+                key={tag}
+                className="mr-2 rounded bg-slate-50 px-2.5 py-1"
+                onPress={() => onTagPress?.(tag)}
+              >
+                <Text className="text-[11px] text-slate-500">{tag}</Text>
+              </Pressable>
+            ))}
           </View>
         </ScrollView>
       ) : null}
 
-      <View className="mt-4 flex-row items-center justify-center">
-        <Pressable className="rounded-xl bg-[#1890FF] px-7 py-3 w-full" onPress={onSearch}>
-          <Text className="text-center text-[15px] font-semibold text-white">查询</Text>
+      {/* 5. 核心查询按钮 */}
+      <View className="mt-4">
+        <Pressable 
+          className="items-center justify-center rounded-full bg-[#1890FF] py-3 active:bg-[#096DD9]" 
+          onPress={onSearch}
+        >
+          <Text className="text-[16px] font-bold tracking-[1px] text-white">搜索酒店</Text>
         </Pressable>
       </View>
     </View>
