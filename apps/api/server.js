@@ -447,10 +447,10 @@ async function initDbPool() {
     // ignore if table missing or already converted
   }
 
-  // Recreate Customer table (drop existing then create fresh).
-  // SQL file note: create_customers_table.sql 包含建表与手机号索引语句，适合放在这里执行。
+  // Ensure Customer table exists (non-destructive).
+  // SQL file note: create_customers_table.sql 包含建表与手机号索引语句；
+  // 这里不再 DROP，避免 dev:api 重启时清空移动端注册用户。
   try {
-    await pool.query("DROP TABLE IF EXISTS \`Customer\`");
     const customerSchemaPath = path.join(
       __dirname,
       "sql",
