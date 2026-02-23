@@ -273,7 +273,7 @@ export default function ListScreen() {
       <SearchSummarySheet
         visible={isSummarySheetOpen}
         city={city}
-        location={location} // 👉 必须传入 location，保证假头部有搜索关键字
+        location={location} 
         checkInDate={checkInDate}
         checkOutDate={checkOutDate}
         nights={nights}
@@ -283,7 +283,7 @@ export default function ListScreen() {
         onClose={() => setIsSummarySheetOpen(false)}
         onConfirm={() => setIsSummarySheetOpen(false)}
 
-        // 1. 点击地点：因地址选择是一个全新复杂页面，必须跳转新页 (大厂也这么做以保证性能)
+
         onCityPress={() => {
           setIsSummarySheetOpen(false);
           router.replace({ pathname: "/location", params: { city, from: "list" } });
@@ -317,7 +317,6 @@ export default function ListScreen() {
         }}
       />
 
-      {/* 原有的日历、人数弹窗保持不变，修改 onClose/onConfirm 逻辑 */}
       <DateRangePickerSheet
         visible={isCalendarOpen}
         checkInDate={checkInDate}

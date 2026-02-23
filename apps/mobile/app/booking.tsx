@@ -1,5 +1,5 @@
 /**
- * 订单预订页（完美跨平台版：解决 Web 端图标不显示问题）
+ * 订单预订页
  */
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";

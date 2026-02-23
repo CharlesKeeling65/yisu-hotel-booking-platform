@@ -1,8 +1,8 @@
 /**
- * 列表页搜索面板（浅蓝底色 + 极简通透胶囊 + 精致定位按钮）
+ * 列表页搜索面板组件
  */
 import { Pressable, Text, View } from 'react-native'
-import { IconSymbol } from '@/components/ui/icon-symbol'
+import { Ionicons, Feather } from '@expo/vector-icons'
 import { stripCityCountySuffix } from '@/lib/location-utils'
 
 type Props = {
@@ -51,16 +51,16 @@ export default function CompactSearchPanel({
   return (
     <View className="bg-[#EEF3F8]">
       
-      {/* 1. 浅蓝背景的主搜索栏 */}
+      {/* 主搜索栏 */}
       <View className="flex-row items-center px-2 pt-2 pb-3">
         {/* 返回按钮 */}
         {onBackPress ? (
           <Pressable className="px-2 py-1" onPress={onBackPress}>
-            <Text className="text-[26px] font-light text-slate-800 leading-none mt-[-2px]">‹</Text>
+            <Feather name="chevron-left" size={26} color="#1E293B" />
           </Pressable>
         ) : null}
 
-        {/* 核心胶囊条 */}
+        {/* 搜索信息展示区 */}
         <Pressable 
           className="flex-1 flex-row items-center bg-white rounded-full pl-4 pr-3 py-2 shadow-sm shadow-slate-200/50"
           onPress={onDatePress}
@@ -83,23 +83,23 @@ export default function CompactSearchPanel({
           </View>
 
           <View className="flex-1 ml-2 flex-row items-center pr-1">
-            <IconSymbol name="magnifyingglass" size={15} color="#94A3B8" />
+            <Feather name="search" size={15} color="#94A3B8" />
             <Text numberOfLines={1} className={`flex-1 ml-1.5 text-[15px] ${location ? 'text-slate-800' : 'text-slate-400'}`}>
               {location || '关键字/位置/酒店名'}
             </Text>
           </View>
         </Pressable>
 
-        {/* 👉 核心修改：右侧定位图标 (加了浅蓝色圆形背景 bg-[#E6F4FF]，尺寸调优) */}
+        {/* 定位按钮 */}
         <Pressable 
           className="ml-2.5 mr-0.5 h-8 w-8 items-center justify-center rounded-full bg-[#E6F4FF]" 
           onPress={onCityPress}
         >
-          <IconSymbol name="location.fill" size={16} color="#1890FF" />
+          <Ionicons name="location" size={16} color="#1890FF" />
         </Pressable>
       </View>
 
-      {/* 2. 白底圆角的筛选 Tabs */}
+      {/* 筛选标签栏 */}
       {filterButtons.length > 0 ? (
         <View className="bg-white rounded-t-[16px] px-3 pt-3 pb-1 flex-row items-center justify-between">
           {filterButtons.map((item) => (

@@ -1,5 +1,5 @@
 /**
- * 列表页：集成式搜索下拉面板 (无缝衔接版 + 圆圈定位标)
+ * 列表页：集成式搜索下拉面板
  */
 import { Modal, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

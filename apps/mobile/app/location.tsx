@@ -7,8 +7,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import FilterBottomSheet from "@/components/hotel/FilterBottomSheet";
-import TopNavBar from "@/components/ui/top-nav-bar";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import TopNavBar from "@/components/ui/top-nav-bar";
 import { fetchLocationSuggestions, type LocationSuggestion } from "@/lib/api";
 import {
   parseReverseGeocode,
@@ -182,13 +182,13 @@ async function loadChinaRegionTree() {
     const local = require("china-area-data/pcaa.json");
     const tree = parsePcaaToTree(local);
     if (tree.length) return tree;
-  } catch {}
+  } catch { }
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const local = require("china-area-data");
     const tree = parsePcaaObjectToTree(local);
     if (tree.length) return tree;
-  } catch {}
+  } catch { }
 
   for (const url of REGION_URLS) {
     try {
@@ -199,7 +199,7 @@ async function loadChinaRegionTree() {
         ? parsePcaaToTree(json)
         : parsePcaaObjectToTree(json);
       if (tree.length) return tree;
-    } catch {}
+    } catch { }
   }
   return FALLBACK_REGION_TREE;
 }
@@ -329,7 +329,7 @@ export default function LocationScreen() {
     try {
       router.back();
       return;
-    } catch {}
+    } catch { }
     router.replace("/");
   };
 
@@ -383,7 +383,7 @@ export default function LocationScreen() {
         pos.coords.latitude,
         pos.coords.longitude,
       );
-      
+
       const info = via.reverse as Location.LocationGeocodedAddress[];
       const provider = via.provider;
       const normalized = via.normalized || {};
@@ -540,12 +540,10 @@ export default function LocationScreen() {
 
   return (
     <View className="flex-1 bg-white">
-      {/* 结合了师兄修改的标题 */}
       <TopNavBar title="地点选择 / 定位" onBack={handleBack} />
-      
+
       <ScrollView className="flex-1 px-4" keyboardShouldPersistTaps="handled">
-        
-        {/* 1. 顶部搜索框 (完全保留你的 UI) */}
+
         <View className="mt-3 flex-row items-center rounded-full bg-slate-100/80 px-4 py-2.5">
           <IconSymbol size={16} name="magnifyingglass" color="#94A3B8" />
           <TextInput
@@ -567,7 +565,6 @@ export default function LocationScreen() {
           ) : null}
         </View>
 
-        {/* --- 分支渲染：如果有输入，显示联想词；没有输入，显示推荐大盘 --- */}
         {keyword.trim().length > 0 ? (
           <View className="mt-6">
             <Text className="text-[14px] font-bold text-slate-800 mb-3">输入联想</Text>
@@ -586,7 +583,7 @@ export default function LocationScreen() {
                   <Text className="ml-2 text-[15px] font-bold text-slate-700">
                     {item.label}
                   </Text>
-                  {/* 👉 核心显示融合点：加入了师兄添加的标签后缀逻辑 */}
+
                   <Text className="ml-2 text-[12px] font-medium text-slate-400">
                     {item.city}
                     {item.type === "hotel"
@@ -605,13 +602,13 @@ export default function LocationScreen() {
           </View>
         ) : (
           <>
-            {/* === 2. 定位与省市区切换 (完全保留你的精美排版) === */}
+
             <View className="mt-6 flex-row items-center justify-between mb-3">
               <Text className="text-[14px] font-bold text-slate-800">当前定位与切换</Text>
             </View>
-            
+
             <View className="rounded-2xl border border-[#E2E8F0] bg-white shadow-sm shadow-slate-100 overflow-hidden">
-              {/* 上半部分：当前定位 */}
+
               <Pressable
                 onPress={() => {
                   if (locatedCity) handleSelect(locatedCity, locatedDetail || locatedCity);
@@ -622,10 +619,10 @@ export default function LocationScreen() {
                 <View className="flex-row items-center flex-1 pr-4">
                   <IconSymbol size={16} name="location.fill" color="#1890FF" />
                   <Text className="ml-1.5 text-[14px] font-bold text-[#1890FF]" numberOfLines={1}>
-                    {locating 
-                      ? "正在定位中..." 
-                      : locatedCity 
-                        ? `${locatedCity} ${locatedDetail}` 
+                    {locating
+                      ? "正在定位中..."
+                      : locatedCity
+                        ? `${locatedCity} ${locatedDetail}`
                         : (errorText || "点击获取当前位置")}
                   </Text>
                 </View>
@@ -634,7 +631,6 @@ export default function LocationScreen() {
                 ) : null}
               </Pressable>
 
-              {/* 下半部分：精确省市区切换 */}
               <View className="flex-row items-center justify-between px-2 py-1">
                 <Pressable onPress={() => setActiveLevel("province")} className="flex-1 items-center py-2.5">
                   <Text className={`text-[13px] font-bold ${selectedProvince ? 'text-slate-800' : 'text-slate-400'}`}>
@@ -654,8 +650,7 @@ export default function LocationScreen() {
                   </Text>
                 </Pressable>
               </View>
-              
-              {/* 仅当省市选择完毕后才显示确认按钮 */}
+
               {provinceCode && cityCode ? (
                 <Pressable
                   className="bg-[#1890FF] items-center py-2.5 mx-3 mb-3 rounded-xl active:bg-[#096DD9]"
@@ -669,7 +664,6 @@ export default function LocationScreen() {
               ) : null}
             </View>
 
-            {/* === 3. 标签区域 (保留你的无边框圆润排版) === */}
             {historyItems.length > 0 ? (
               <View className="mt-7">
                 <View className="mb-3 flex-row items-center justify-between">
@@ -726,7 +720,6 @@ export default function LocationScreen() {
         )}
       </ScrollView>
 
-      {/* 省市区弹层保持不变 */}
       <FilterBottomSheet
         visible={Boolean(activeLevel)}
         title={activeTitle}
