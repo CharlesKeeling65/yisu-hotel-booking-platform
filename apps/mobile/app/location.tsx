@@ -1,8 +1,5 @@
 /**
- * 位置选择页
- * 目标：
- * - 提供“省/市/县三级选择 + 输入检索 + 一键定位”能力
- * - 选中后，根据来源页面（首页/列表）回跳并带回参数
+ * 位置选择页（极致排版与交互版）
  */
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -13,14 +10,14 @@ import FilterBottomSheet from "@/components/hotel/FilterBottomSheet";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import TopNavBar from "@/components/ui/top-nav-bar";
 import {
-    parseReverseGeocode,
-    reverseGeocodeWithProvider,
-    stripCityCountySuffix,
+  parseReverseGeocode,
+  reverseGeocodeWithProvider,
+  stripCityCountySuffix,
 } from "@/lib/location-utils";
 import { setSearchSession } from "@/lib/search-session";
 
-const HOT_CITIES = ["扬州", "上海", "南京", "杭州"];
-const HOT_AREAS = ["外滩", "陆家嘴", "西湖", "新街口", "夫子庙", "瘦西湖"];
+const HOT_CITIES = ["扬州", "上海", "北京", "南京", "杭州", "广州", "深圳", "成都"];
+const HOT_AREAS = ["外滩", "陆家嘴", "西湖", "新街口", "夫子庙", "瘦西湖", "春熙路", "天河城"];
 const HISTORY_ITEMS = ["东关街", "万象城", "近地铁", "亲子房"];
 const SUGGESTIONS = [
   { city: "上海", label: "外滩" },
@@ -165,24 +162,18 @@ function parsePcaaObjectToTree(raw: unknown): RegionNode[] {
 }
 
 async function loadChinaRegionTree() {
-  // 1) 优先本地依赖（离线可用）：china-area-data
   try {
     const local = require("china-area-data/pcaa.json");
     const tree = parsePcaaToTree(local);
     if (tree.length) return tree;
-  } catch {
-    // package 路径不匹配时，继续尝试默认导出
-  }
+  } catch {}
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const local = require("china-area-data");
     const tree = parsePcaaObjectToTree(local);
     if (tree.length) return tree;
-  } catch {
-    // package 未安装或路径不匹配时，继续走 CDN 兜底
-  }
+  } catch {}
 
-  // 2) 再尝试 CDN
   for (const url of REGION_URLS) {
     try {
       const res = await fetch(url);
@@ -192,9 +183,7 @@ async function loadChinaRegionTree() {
         ? parsePcaaToTree(json)
         : parsePcaaObjectToTree(json);
       if (tree.length) return tree;
-    } catch {
-      // ignore and try next URL
-    }
+    } catch {}
   }
   return FALLBACK_REGION_TREE;
 }
@@ -236,7 +225,6 @@ export default function LocationScreen() {
   const [errorText, setErrorText] = useState("");
   const [locatedCity, setLocatedCity] = useState("");
   const [locatedDetail, setLocatedDetail] = useState("");
-  const [locatedRawText, setLocatedRawText] = useState("");
 
   const [regionTree, setRegionTree] = useState<RegionNode[]>([]);
   const [regionLoading, setRegionLoading] = useState(true);
@@ -310,7 +298,6 @@ export default function LocationScreen() {
   const selectedCounty = countyOptions.find((x) => x.code === countyCode);
 
   const handleBack = () => {
-    // 若已选择省市，返回时直接带回所选城市，避免“看起来选了但返回仍是旧值”。
     const chosen = stripCityCountySuffix(
       selectedCounty?.name || selectedCity?.name || "",
     );
@@ -328,7 +315,6 @@ export default function LocationScreen() {
   const navigateWithSelection = (nextCity: string, nextLocation: string) => {
     const targetPath = from === "list" ? "/list" : "/";
     const normalizedCity = stripCityCountySuffix(nextCity || "");
-    // 同步会话，避免首页 useFocusEffect 把城市回写成旧值。
     setSearchSession({
       city: normalizedCity,
       location: nextLocation || "",
@@ -375,40 +361,25 @@ export default function LocationScreen() {
         pos.coords.latitude,
         pos.coords.longitude,
       );
-      const provider = via.provider;
       const info = via.reverse as Location.LocationGeocodedAddress[];
-      if (__DEV__)
-        console.log("[location-page-locate:raw]", {
-          provider,
-          coords: pos.coords,
-          reverse: info,
-        });
       const parsed = parseReverseGeocode(info?.[0]);
-      if (__DEV__) console.log("[location-page-locate:parsed]", parsed);
+      
       if (!info?.[0]) {
-        setErrorText(
-          "已获取坐标，但未获取到地址（Web/模拟器常见）。可用省市县下拉或手动输入。",
-        );
+        setErrorText("无法解析坐标，请手动选择。");
         setLocatedCity("");
-        setLocatedDetail(
-          `经度 ${pos.coords.longitude.toFixed(6)} · 纬度 ${pos.coords.latitude.toFixed(6)}`,
-        );
+        setLocatedDetail(`纬度: ${pos.coords.latitude.toFixed(4)}`);
       } else {
         setLocatedCity(parsed.cityOrCounty || "");
         setLocatedDetail(parsed.detailText || "");
       }
-      setLocatedRawText(
-        JSON.stringify({ coords: pos.coords, reverse: info }, null, 2),
-      );
     } catch {
-      setErrorText("定位失败，请重试");
+      setErrorText("定位失败，请检查网络或权限设置");
     } finally {
       setLocating(false);
     }
   };
 
   useEffect(() => {
-    // 进入地点页后自动尝试定位
     handleLocate();
   }, []);
 
@@ -443,238 +414,193 @@ export default function LocationScreen() {
       ? "选择省"
       : activeLevel === "city"
         ? "选择市"
-        : "选择县/区";
+        : "选择区/县";
 
   return (
     <View className="flex-1 bg-white">
-      <TopNavBar title="地点选择 / 定位" onBack={handleBack} />
-      <View className="px-4">
-        <View className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+      <TopNavBar title="地点选择" onBack={handleBack} />
+      
+      <ScrollView className="flex-1 px-4" keyboardShouldPersistTaps="handled">
+        
+        {/* 1. 顶部搜索框 */}
+        <View className="mt-3 flex-row items-center rounded-full bg-slate-100/80 px-4 py-2.5">
+          <IconSymbol size={16} name="magnifyingglass" color="#94A3B8" />
           <TextInput
             ref={inputRef}
             value={keyword}
             onChangeText={setKeyword}
-            className="text-base text-slate-900"
-            placeholder="位置/商圈/酒店"
-            placeholderTextColor="#C0C4CC"
+            className="flex-1 ml-2 text-[14px] font-medium text-slate-900 min-w-0"
+            style={{ outlineStyle: 'none' } as any}
+            placeholder="关键字/位置/品牌/酒店名"
+            placeholderTextColor="#94A3B8"
             returnKeyType="search"
             autoFocus
             onSubmitEditing={handleSubmit}
           />
+          {keyword.length > 0 ? (
+            <Pressable onPress={() => setKeyword("")} className="ml-2 h-5 w-5 items-center justify-center rounded-full bg-slate-300">
+              <Text className="text-[11px] font-bold text-white">×</Text>
+            </Pressable>
+          ) : null}
         </View>
 
-        <View className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-          <Text className="text-xs text-slate-500">
-            行政区选择（省、市必填，县/区可选）
-          </Text>
-          <View className="mt-2 flex-row items-center gap-2">
-            <Pressable
-              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2"
-              onPress={() => setActiveLevel("province")}
-            >
-              <Text
-                numberOfLines={1}
-                className={`text-sm ${selectedProvince ? "text-slate-700" : "text-slate-400"}`}
-              >
-                {selectedProvince?.name || "请选择省"}
-              </Text>
-            </Pressable>
-            <Pressable
-              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2"
-              onPress={() => setActiveLevel("city")}
-              disabled={!provinceCode}
-            >
-              <Text
-                numberOfLines={1}
-                className={`text-sm ${selectedCity ? "text-slate-700" : "text-slate-400"}`}
-              >
-                {selectedCity?.name || "请选择市"}
-              </Text>
-            </Pressable>
-            <Pressable
-              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2"
-              onPress={() => setActiveLevel("county")}
-              disabled={!cityCode}
-            >
-              <Text
-                numberOfLines={1}
-                className={`text-sm ${selectedCounty ? "text-slate-700" : "text-slate-400"}`}
-              >
-                {selectedCounty?.name || "县/区(可选)"}
-              </Text>
-            </Pressable>
-          </View>
-          <View className="mt-3 flex-row items-center gap-3">
-            <Pressable
-              disabled={!provinceCode || !cityCode}
-              className={`flex-1 rounded-xl py-2.5 ${provinceCode && cityCode ? "bg-[#1890FF]" : "bg-slate-200"}`}
-              onPress={() => {
-                const target = stripCityCountySuffix(
-                  selectedCounty?.name || selectedCity?.name || "",
-                );
-                if (!target) return;
-                handleSelect(target, "");
-              }}
-            >
-              <Text className="text-center text-sm font-semibold text-white">
-                仅返回市/县名
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View className="mt-4 flex-row items-center justify-between">
-          <Text className="text-sm text-slate-500">定位当前城市</Text>
-          <Pressable
-            disabled={locating}
-            onPress={handleLocate}
-            className={`h-9 w-9 items-center justify-center rounded-full ${locating ? "bg-[#D7E9FB]" : "bg-[#E6F4FF]"}`}
-          >
-            <IconSymbol size={18} name="location.fill" color="#1890FF" />
-          </Pressable>
-        </View>
-        {errorText ? (
-          <Text className="mt-2 text-xs text-red-500">{errorText}</Text>
-        ) : null}
-
-        {locatedCity ? (
-          <View className="mt-2 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-            <Text className="text-xs text-slate-500">
-              当前定位结果（可直接返回）
-            </Text>
-            <View className="mt-2 gap-2">
-              <Pressable
-                onPress={() => handleSelect(locatedCity, "")}
-                className="rounded-xl border border-[#D8E8FA] bg-white px-3 py-2"
-              >
-                <Text className="text-sm font-semibold text-slate-700">
-                  {locatedCity}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() =>
-                  handleSelect(locatedCity, locatedDetail || locatedCity)
-                }
-                className="rounded-xl border border-[#D8E8FA] bg-white px-3 py-2"
-              >
-                <Text className="text-sm text-slate-700">
-                  {locatedDetail
-                    ? `${locatedCity} ${locatedDetail}`
-                    : locatedCity}
-                </Text>
-              </Pressable>
-            </View>
-            {__DEV__ && locatedRawText ? (
-              <View className="mt-3 rounded-xl bg-white px-2.5 py-2">
-                <Text className="text-[11px] text-slate-400">
-                  定位原始返回（调试）
-                </Text>
-                <Text className="mt-1 text-[11px] text-slate-500">
-                  {locatedRawText}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
+        {/* --- 分支渲染：如果有输入，显示联想词；没有输入，显示推荐大盘 --- */}
         {keyword.trim().length > 0 ? (
-          <>
-            <Text className="mt-6 text-sm text-slate-500">输入联想</Text>
-            <View className="mt-3">
-              {suggestions.length === 0 ? (
-                <Text className="text-xs text-slate-400">暂无匹配结果</Text>
-              ) : (
-                suggestions.map((item) => (
-                  <Pressable
-                    key={`${item.city}-${item.label}`}
-                    onPress={() =>
-                      handleSelect(stripCityCountySuffix(item.city), item.label)
-                    }
-                    className="mt-2 rounded-2xl border border-slate-100 bg-white px-3 py-3"
-                  >
-                    <Text className="text-sm text-slate-700">
-                      {item.label}
-                      <Text className="text-xs text-slate-400">
-                        {" "}
-                        · {item.city}
-                      </Text>
-                    </Text>
-                  </Pressable>
-                ))
-              )}
-            </View>
-          </>
+          <View className="mt-6">
+            <Text className="text-[14px] font-bold text-slate-800 mb-3">输入联想</Text>
+            {suggestions.length === 0 ? (
+              <Text className="text-[13px] text-slate-400">暂无匹配结果，可直接点击键盘回车搜索</Text>
+            ) : (
+              suggestions.map((item) => (
+                <Pressable
+                  key={`${item.city}-${item.label}`}
+                  onPress={() => handleSelect(stripCityCountySuffix(item.city), item.label)}
+                  className="mt-2 flex-row items-center rounded-xl bg-slate-50 px-4 py-3.5 border border-slate-100"
+                >
+                  <IconSymbol size={16} name="location.fill" color="#94A3B8" />
+                  <Text className="ml-2 text-[15px] font-bold text-slate-700">
+                    {item.label}
+                  </Text>
+                  <Text className="ml-2 text-[12px] font-medium text-slate-400">
+                    {item.city}
+                  </Text>
+                </Pressable>
+              ))
+            )}
+          </View>
         ) : (
           <>
-            <View className="mt-6 flex-row items-center justify-between">
-              <Text className="text-sm text-slate-500">历史搜索</Text>
-              <Pressable onPress={() => setHistoryItems([])}>
-                <Text className="text-xs text-slate-400">清空</Text>
-              </Pressable>
+            {/* === 2. 核心调整：把定位和省市区切换放在一起 === */}
+            <View className="mt-6 flex-row items-center justify-between mb-3">
+              <Text className="text-[14px] font-bold text-slate-800">当前定位与切换</Text>
             </View>
-            <View className="mt-3 flex-row flex-wrap gap-2">
-              {historyItems.length === 0 ? (
-                <Text className="text-xs text-slate-400">暂无历史记录</Text>
-              ) : (
-                historyItems.map((item) => (
+            
+            <View className="rounded-2xl border border-[#E2E8F0] bg-white shadow-sm shadow-slate-100 overflow-hidden">
+              {/* 上半部分：当前定位 */}
+              <Pressable
+                onPress={() => {
+                  if (locatedCity) handleSelect(locatedCity, locatedDetail || locatedCity);
+                  else handleLocate();
+                }}
+                className="flex-row items-center justify-between bg-[#F8FAFC] px-4 py-3.5 border-b border-[#F1F5F9]"
+              >
+                <View className="flex-row items-center flex-1 pr-4">
+                  <IconSymbol size={16} name="location.fill" color="#1890FF" />
+                  <Text className="ml-1.5 text-[14px] font-bold text-[#1890FF]" numberOfLines={1}>
+                    {locating 
+                      ? "正在定位中..." 
+                      : locatedCity 
+                        ? `${locatedCity} ${locatedDetail}` 
+                        : (errorText || "点击获取当前位置")}
+                  </Text>
+                </View>
+                {!locating && locatedCity ? (
+                  <Text className="text-[11px] font-bold text-[#1890FF]/60 shrink-0">点击使用</Text>
+                ) : null}
+              </Pressable>
+
+              {/* 下半部分：精确省市区切换 */}
+              <View className="flex-row items-center justify-between px-2 py-1">
+                <Pressable onPress={() => setActiveLevel("province")} className="flex-1 items-center py-2.5">
+                  <Text className={`text-[13px] font-bold ${selectedProvince ? 'text-slate-800' : 'text-slate-400'}`}>
+                    {selectedProvince?.name || "选择省份"}
+                  </Text>
+                </Pressable>
+                <View className="w-[1px] h-3 bg-slate-200" />
+                <Pressable onPress={() => setActiveLevel("city")} disabled={!provinceCode} className="flex-1 items-center py-2.5">
+                  <Text className={`text-[13px] font-bold ${selectedCity ? 'text-slate-800' : 'text-slate-400'}`}>
+                    {selectedCity?.name || "选择城市"}
+                  </Text>
+                </Pressable>
+                <View className="w-[1px] h-3 bg-slate-200" />
+                <Pressable onPress={() => setActiveLevel("county")} disabled={!cityCode} className="flex-1 items-center py-2.5">
+                  <Text className={`text-[13px] font-bold ${selectedCounty ? 'text-[#1890FF]' : 'text-slate-400'}`}>
+                    {selectedCounty?.name || "区/县 (可选)"}
+                  </Text>
+                </Pressable>
+              </View>
+              
+              {/* 仅当省市选择完毕后才显示确认按钮 */}
+              {provinceCode && cityCode ? (
+                <Pressable
+                  className="bg-[#1890FF] items-center py-2.5 mx-3 mb-3 rounded-xl active:bg-[#096DD9]"
+                  onPress={() => {
+                    const target = stripCityCountySuffix(selectedCounty?.name || selectedCity?.name || "");
+                    if (target) handleSelect(target, "");
+                  }}
+                >
+                  <Text className="text-[13px] font-bold text-white tracking-[1px]">确定切换</Text>
+                </Pressable>
+              ) : null}
+            </View>
+
+            {/* === 3. 标签区域 (扁平化、纯色底、去边框) === */}
+            {historyItems.length > 0 ? (
+              <View className="mt-7">
+                <View className="mb-3 flex-row items-center justify-between">
+                  <Text className="text-[14px] font-bold text-slate-800">历史记录</Text>
+                  <Pressable onPress={() => setHistoryItems([])} className="flex-row items-center">
+                    <IconSymbol size={12} name="trash" color="#94A3B8" />
+                    <Text className="ml-1 text-[12px] text-slate-400">清空</Text>
+                  </Pressable>
+                </View>
+                <View className="flex-row flex-wrap gap-2.5">
+                  {historyItems.map((item) => (
+                    <Pressable
+                      key={item}
+                      onPress={() => handleSelect(stripCityCountySuffix(String(city || "上海")), item)}
+                      // 核心修改：移除 border，采用极浅灰底色，缩小上下 padding
+                      className="rounded-full bg-[#F4F5F8] px-3.5 py-1.5 active:bg-slate-200"
+                    >
+                      <Text className="text-[12px] text-[#333333]">{item}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            <View className="mt-7">
+              <Text className="mb-3 text-[14px] font-bold text-slate-800">热门城市</Text>
+              <View className="flex-row flex-wrap gap-2.5">
+                {HOT_CITIES.map((item) => (
                   <Pressable
                     key={item}
-                    onPress={() =>
-                      handleSelect(
-                        stripCityCountySuffix(String(city || "上海")),
-                        item,
-                      )
-                    }
-                    className="rounded-full border border-slate-100 bg-white px-3 py-2"
+                    onPress={() => handleSelect(stripCityCountySuffix(item), "")}
+                    className="rounded-full bg-[#F4F5F8] px-3.5 py-1.5 active:bg-slate-200"
                   >
-                    <Text className="text-xs text-slate-600">{item}</Text>
+                    <Text className="text-[12px] text-[#333333]">{item}</Text>
                   </Pressable>
-                ))
-              )}
+                ))}
+              </View>
             </View>
 
-            <Text className="mt-6 text-sm text-slate-500">热门城市</Text>
-            <View className="mt-3 flex-row flex-wrap gap-2">
-              {HOT_CITIES.map((item) => (
-                <Pressable
-                  key={item}
-                  onPress={() => handleSelect(stripCityCountySuffix(item), "")}
-                  className="rounded-full bg-[#F5F7FB] px-3 py-2"
-                >
-                  <Text className="text-xs text-slate-600">{item}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <Text className="mt-6 text-sm text-slate-500">热门商圈</Text>
-            <View className="mt-3 flex-row flex-wrap gap-2">
-              {HOT_AREAS.map((item) => (
-                <Pressable
-                  key={item}
-                  onPress={() =>
-                    handleSelect(
-                      stripCityCountySuffix(String(city || "上海")),
-                      item,
-                    )
-                  }
-                  className="rounded-full bg-[#F5F7FB] px-3 py-2"
-                >
-                  <Text className="text-xs text-slate-600">{item}</Text>
-                </Pressable>
-              ))}
+            <View className="mt-7 mb-12">
+              <Text className="mb-3 text-[14px] font-bold text-slate-800">热门行政区/商圈</Text>
+              <View className="flex-row flex-wrap gap-2.5">
+                {HOT_AREAS.map((item) => (
+                  <Pressable
+                    key={item}
+                    onPress={() => handleSelect(stripCityCountySuffix(String(city || "上海")), item)}
+                    className="rounded-full bg-[#F4F5F8] px-3.5 py-1.5 active:bg-slate-200"
+                  >
+                    <Text className="text-[12px] text-[#333333]">{item}</Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
           </>
         )}
-      </View>
+      </ScrollView>
 
+      {/* 省市区弹层保持不变 */}
       <FilterBottomSheet
         visible={Boolean(activeLevel)}
         title={activeTitle}
         onClose={() => setActiveLevel(null)}
       >
         {regionLoading ? (
-          <Text className="py-3 text-xs text-slate-400">
-            加载全国省市县数据中...
+          <Text className="py-4 text-center text-[13px] font-medium text-slate-400">
+            加载全国省市数据中...
           </Text>
         ) : (
           <ScrollView
@@ -685,7 +611,7 @@ export default function LocationScreen() {
             {activeOptions.map((item) => (
               <Pressable
                 key={item.code}
-                className="border-b border-slate-100 py-3"
+                className="border-b border-slate-50 py-3.5 px-2 active:bg-slate-50"
                 onPress={() => {
                   if (activeLevel === "province") {
                     setProvinceCode(item.code);
@@ -704,7 +630,7 @@ export default function LocationScreen() {
                   setActiveLevel(null);
                 }}
               >
-                <Text className="text-sm text-slate-700">{item.name}</Text>
+                <Text className="text-[14px] font-medium text-slate-700">{item.name}</Text>
               </Pressable>
             ))}
           </ScrollView>

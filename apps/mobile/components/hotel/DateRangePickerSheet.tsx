@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
-import { Calendar, DateData } from "react-native-calendars";
+import { Calendar, DateData, LocaleConfig } from "react-native-calendars";
 
 import FilterBottomSheet from "@/components/hotel/FilterBottomSheet";
+
+// --- 日历中文本地化配置 ---
+LocaleConfig.locales['zh'] = {
+  monthNames: ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'],
+  monthNamesShort: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
+  dayNames: ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'],
+  dayNamesShort: ['日', '一', '二', '三', '四', '五', '六'],
+  today: '今天'
+};
+LocaleConfig.defaultLocale = 'zh';
+// ------------------------
 
 type Props = {
   visible: boolean;
@@ -70,6 +81,7 @@ export default function DateRangePickerSheet({
           {stage === "checkIn" ? "请选择入住日期" : "请选择离店日期"}
         </Text>
         <Calendar
+          monthFormat={'yyyy年 MM月'}
           minDate={todayString}
           markingType="period"
           markedDates={markedDates}
