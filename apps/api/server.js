@@ -847,9 +847,10 @@ app.post("/api/customer/login", async (req, res) => {
       .status(400)
       .json({ code: 400, msg: "手机号/邮箱 与 password 必填" });
   try {
+    // 支持通过手机号、邮箱、id 或 名称（用户名）登录
     const [rows] = await pool.query(
-      "SELECT id, password, phone, name, email, createdAt FROM `Customer` WHERE phone = ? OR email = ? LIMIT 1",
-      [idv, idv],
+      "SELECT id, password, phone, name, email, createdAt FROM `Customer` WHERE phone = ? OR email = ? OR id = ? OR name = ? LIMIT 1",
+      [idv, idv, idv, idv],
     );
     const customer = rows[0];
     if (!customer)
