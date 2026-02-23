@@ -68,6 +68,7 @@ export default function BookingScreen() {
   const [successVisible, setSuccessVisible] = useState(false);
   const [successCountdown, setSuccessCountdown] = useState(5);
   const successTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [confirmLoginVisible, setConfirmLoginVisible] = useState(false);
 
   const [roomsCount, setRoomsCount] = useState(Math.max(1, Number(rooms || 1)));
   const [datePickerVisible, setDatePickerVisible] = useState(false);
@@ -170,13 +171,7 @@ export default function BookingScreen() {
     }
 
     if (!customerId) {
-      Alert.alert("请先登录", "登录后才能查看和管理订单", [
-        {
-          text: "去登录",
-          onPress: () => router.push("/login"),
-        },
-        { text: "取消", style: "cancel" },
-      ]);
+      setConfirmLoginVisible(true);
       return;
     }
 
@@ -688,6 +683,72 @@ export default function BookingScreen() {
           </Text>
         </Pressable>
       </View>
+      <Modal
+        visible={confirmLoginVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmLoginVisible(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "rgba(0,0,0,0.4)",
+            padding: 24,
+          }}
+        >
+          <View
+            style={{
+              borderRadius: 12,
+              backgroundColor: "#fff",
+              padding: 16,
+              width: "100%",
+              maxWidth: 480,
+            }}
+          >
+            <Text
+              style={{ fontSize: 16, fontWeight: "700", textAlign: "center" }}
+            >
+              请先登录！
+            </Text>
+            <Text style={{ marginTop: 12, color: "#6B7280", lineHeight: 20 }}>
+              登录后才能继续下单和管理订单。
+            </Text>
+            <View style={{ flexDirection: "row", marginTop: 16 }}>
+              <Pressable
+                onPress={() => setConfirmLoginVisible(false)}
+                style={{
+                  flex: 1,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: "#E5E7EB",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                  marginRight: 8,
+                }}
+              >
+                <Text style={{ color: "#374151" }}>取消</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setConfirmLoginVisible(false);
+                  router.push("/login");
+                }}
+                style={{
+                  flex: 1,
+                  borderRadius: 8,
+                  backgroundColor: "#1890FF",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "600" }}>去登录</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

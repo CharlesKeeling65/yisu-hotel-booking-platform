@@ -10,15 +10,35 @@ export default function RegisterScreen() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   const handleClose = () => {
     router.back();
   };
 
   const handleRegister = async () => {
+    // basic client-side validation
+    setPhoneError(null);
+    setEmailError(null);
     if (!username.trim() || !phone.trim() || !password) {
       Alert.alert("请填写用户名、手机号与密码");
       return;
+    }
+    // 手机号校验（中国手机号 11 位，简单校验）
+    const phoneDigits = phone.replace(/\D/g, "");
+    if (!/^1\d{10}$/.test(phoneDigits)) {
+      setPhoneError("手机号格式不正确");
+      return;
+    }
+    // 邮箱如果填写则校验格式
+    if (email.trim()) {
+      const emailVal = email.trim();
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRe.test(emailVal)) {
+        setEmailError("邮箱格式不正确");
+        return;
+      }
     }
     setLoading(true);
     try {
@@ -78,23 +98,40 @@ export default function RegisterScreen() {
             <Text className="text-sm text-neutral-700">手机号（必填）</Text>
             <TextInput
               value={phone}
-              onChangeText={setPhone}
+              onChangeText={(v) => {
+                setPhone(v);
+                // 实时校验清理
+                if (phoneError) setPhoneError(null);
+              }}
               placeholder="手机号"
               keyboardType="phone-pad"
-              className="mt-2 rounded-md border border-neutral-200 bg-white px-3 py-2"
+              className={`mt-2 rounded-md px-3 py-2 ${phoneError ? "border border-red-500" : "border border-neutral-200"} bg-white`}
             />
+            {phoneError ? (
+              <Text style={{ color: "#EF4444", marginTop: 6, fontSize: 12 }}>
+                {phoneError}
+              </Text>
+            ) : null}
           </View>
 
           <View className="mt-4">
             <Text className="text-sm text-neutral-700">邮箱（选填）</Text>
             <TextInput
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(v) => {
+                setEmail(v);
+                if (emailError) setEmailError(null);
+              }}
               placeholder="邮箱"
               keyboardType="email-address"
-              className="mt-2 rounded-md border border-neutral-200 bg-white px-3 py-2"
+              className={`mt-2 rounded-md px-3 py-2 ${emailError ? "border border-red-500" : "border border-neutral-200"} bg-white`}
               autoCapitalize="none"
             />
+            {emailError ? (
+              <Text style={{ color: "#EF4444", marginTop: 6, fontSize: 12 }}>
+                {emailError}
+              </Text>
+            ) : null}
           </View>
 
           <Pressable
