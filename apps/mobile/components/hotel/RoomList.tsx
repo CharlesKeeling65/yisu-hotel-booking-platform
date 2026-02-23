@@ -1,6 +1,7 @@
 /**
  * 房型列表组件
  * 输入 rooms 后，逐项渲染房型名称、可住人数、餐食/取消策略与价格。
+ * 新增功能：自动将“可订”房型排在前面，已售罄房型沉底，并添加右上角斜体角标。
  */
 import { Image } from "expo-image";
 import { useEffect, useState } from "react";
@@ -47,8 +48,17 @@ function RoomRow({
   return (
     <View
       key={room.id}
-      className="flex-row rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm"
+      className={`relative flex-row rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm ${!available ? 'opacity-60' : ''}`}
     >
+      {/* 👉 核心修改：添加右上角的灰色斜体“已售罄”角标 */}
+      {!available && (
+        <View className="absolute top-0 right-0 z-10 rounded-bl-xl rounded-tr-2xl bg-slate-200/70 px-2.5 py-1">
+          <Text className="text-[11px] font-bold italic text-slate-500">
+            已售罄
+          </Text>
+        </View>
+      )}
+
       <Image
         source={{ uri: imageUri }}
         style={{ width: 112, height: 86, borderRadius: 12 }}
@@ -62,7 +72,7 @@ function RoomRow({
         <View className="flex-row items-start justify-between">
           <View className="min-w-0 flex-1 pr-2">
             <Text
-              className="font-semibold text-neutral-900"
+              className={`font-semibold text-neutral-900 ${!available ? 'pr-10' : ''}`} // 防止和角标重叠
               style={{ fontSize: nameSize }}
               numberOfLines={1}
             >
@@ -114,11 +124,11 @@ function RoomRow({
               );
             })()}
           </View>
+          
+          {/* 原本的"已售罄"红字逻辑，因为右上角有了角标，这里只保留"仅剩X间"的提示 */}
           <View className="shrink-0 pl-2">
             {typeof remain === "number" ? (
-              remain === 0 ? (
-                <Text className="text-xs font-medium text-red-500">已售罄</Text>
-              ) : remain > 0 && remain <= 4 ? (
+               remain > 0 && remain <= 4 ? (
                 <Text className="text-xs font-medium text-amber-600">
                   仅剩 {remain} 间
                 </Text>
@@ -195,9 +205,25 @@ function RoomRow({
 }
 
 export default function RoomList({ rooms, onBook }: RoomListProps) {
+  // 👉 核心修改：根据 remain 字段对房间进行排序，可订的在前，售罄的在后，同状态下按价格排序
+  const sortedRooms = [...rooms].sort((a, b) => {
+    const rawA = (a as any).raw;
+    const rawB = (b as any).raw;
+    
+    const remainA = typeof a.remain === "number" ? a.remain : typeof rawA?.remain === "number" ? rawA.remain : undefined;
+    const remainB = typeof b.remain === "number" ? b.remain : typeof rawB?.remain === "number" ? rawB.remain : undefined;
+
+    const aAvailable = remainA == null || remainA > 0;
+    const bAvailable = remainB == null || remainB > 0;
+
+    if (aAvailable && !bAvailable) return -1;
+    if (!aAvailable && bAvailable) return 1;
+    return (a.price || 0) - (b.price || 0);
+  });
+
   return (
     <View className="gap-3">
-      {rooms.map((room) => (
+      {sortedRooms.map((room) => (
         <RoomRow key={room.id} room={room} onBook={onBook} />
       ))}
     </View>
