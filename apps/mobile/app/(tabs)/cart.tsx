@@ -6,8 +6,8 @@
  * - 支持下拉刷新
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -132,26 +132,31 @@ export default function OrdersScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const info = await AsyncStorage.getItem("customer_info");
-        if (!mounted) return;
-        if (info) {
-          const parsed = JSON.parse(info);
-          if (parsed?.id) {
-            setCustomerId(String(parsed.id));
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      (async () => {
+        try {
+          const info = await AsyncStorage.getItem("customer_info");
+          if (!mounted) return;
+          if (info) {
+            const parsed = JSON.parse(info);
+            if (parsed?.id) {
+              setCustomerId(String(parsed.id));
+              return;
+            }
           }
+          // clear when no info
+          setCustomerId(null);
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+      })();
+      return () => {
+        mounted = false;
+      };
+    }, []),
+  );
 
   useEffect(() => {
     return () => {

@@ -163,7 +163,10 @@ async function reverseGeocodeByStrategy(lat, lon) {
     return (
       (await reverseByAmap(lat, lon)) ||
       (await reverseByNominatim(lat, lon)) ||
-      (await reverseByBigDataCloud(lat, lon)) || { provider: "none", reverse: [] }
+      (await reverseByBigDataCloud(lat, lon)) || {
+        provider: "none",
+        reverse: [],
+      }
     );
   }
 
@@ -448,6 +451,15 @@ async function initDbPool() {
     // 添加 customer_id 兼容字段（如果已存在会抛错，忽略即可）
     await pool.query(
       "ALTER TABLE `orders` ADD COLUMN `customer_id` VARCHAR(64) NULL COMMENT '下单客户ID，对应 Customer.id' AFTER `id`",
+    );
+  } catch (_e) {
+    // ignore when column already exists or table missing
+  }
+
+  // Best-effort: add token column to Customer table for session tokens
+  try {
+    await pool.query(
+      "ALTER TABLE `Customer` ADD COLUMN `token` VARCHAR(128) NULL COMMENT '登录会话 token' AFTER `password`",
     );
   } catch (_e) {
     // ignore when column already exists or table missing
@@ -845,10 +857,24 @@ app.post("/api/customer/login", async (req, res) => {
     const cipher = sha256(String(password || ""));
     if (!verifyPassword(cipher, customer.password))
       return res.status(401).json({ code: 401, msg: "用户名或密码错误" });
+
+    // 生成 token 并保存到 Customer 表（轻量 session 方案）
+    const token = `cust-${customer.id}-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+    try {
+      await pool.query("UPDATE `Customer` SET token = ? WHERE id = ?", [
+        token,
+        customer.id,
+      ]);
+    } catch (_e) {
+      // ignore storage error, 仍然返回 token 给客户端
+    }
+
     return res.json({
       code: 200,
       data: {
-        token: `cust-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        token,
         customer: {
           id: customer.id,
           phone: customer.phone,
@@ -2226,11 +2252,35 @@ function mapMobileOrderRow(row) {
   };
 }
 
+// 从请求头或自定义 header 中解析 token 并查出对应 customer id
+async function getCustomerIdFromReq(req) {
+  const authHeader =
+    req.headers?.authorization ||
+    req.headers?.["x-customer-token"] ||
+    req.headers?.["x-token"] ||
+    "";
+  const token = String(authHeader || "")
+    .replace(/^Bearer\s*/i, "")
+    .trim();
+  if (!token) return null;
+  try {
+    const [rows] = await pool.query(
+      "SELECT id FROM `Customer` WHERE token = ? LIMIT 1",
+      [token],
+    );
+    return rows && rows[0] && rows[0].id ? rows[0].id : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
 app.post("/api/mobile/orders", async (req, res) => {
   const p = req.body || {};
-  const customerId = String(p.customerId || "").trim();
-  if (!customerId)
+  // 强制使用已登录用户的 customer_id（从 token 中解析），不能由客户端任意指定
+  const tokenCustomerId = await getCustomerIdFromReq(req);
+  if (!tokenCustomerId)
     return res.status(401).json({ code: 401, msg: "请先登录后再下单" });
+  const customerId = tokenCustomerId;
 
   if (
     !hasRequiredFields(p, [
@@ -2361,7 +2411,6 @@ app.post("/api/mobile/orders", async (req, res) => {
 // 移动端：订单支付成功，更新支付状态为已支付
 app.post("/api/mobile/orders/:id/pay", async (req, res) => {
   const id = String(req.params.id || "").trim();
-  const customerId = String(req.body?.customerId || "").trim();
   if (!id) {
     return res.status(400).json({ code: 400, msg: "缺少必要参数：订单 id" });
   }
@@ -2369,13 +2418,17 @@ app.post("/api/mobile/orders/:id/pay", async (req, res) => {
   const now = formatDateForMySQL();
 
   try {
+    // 验证 token 并使用 token 对应的 customer_id，防止越权
+    const tokenCustomerId = await getCustomerIdFromReq(req);
+    if (!tokenCustomerId) {
+      return res.status(401).json({ code: 401, msg: "请先登录" });
+    }
+
     let sql =
       "UPDATE `orders` SET status = ?, payment_status = ?, updated_at = ? WHERE id = ?";
     const params = ["upcoming", "paid", now, id];
-    if (customerId) {
-      sql += " AND customer_id = ?";
-      params.push(customerId);
-    }
+    sql += " AND customer_id = ?";
+    params.push(tokenCustomerId);
 
     const [result] = await pool.query(sql, params);
 
@@ -2397,13 +2450,11 @@ app.post("/api/mobile/orders/:id/pay", async (req, res) => {
 });
 
 app.get("/api/mobile/orders", async (req, res) => {
-  const customerId = String(
-    req.query.customerId || req.query.customer_id || "",
-  ).trim();
-  if (!customerId)
-    return res
-      .status(401)
-      .json({ code: 401, msg: "缺少 customerId，请先登录" });
+  // 强制从 token 中解析 customer_id，拒绝客户端传入任意 customerId
+  const tokenCustomerId = await getCustomerIdFromReq(req);
+  if (!tokenCustomerId)
+    return res.status(401).json({ code: 401, msg: "请先登录" });
+  const customerId = tokenCustomerId;
 
   const page = parseIntSafe(req.query.page || 1, 1) || 1;
   const pageSize = parseIntSafe(req.query.pageSize || 10, 10) || 10;

@@ -1,3 +1,5 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 const API_BASE_URL = "http://localhost:3000";
 
 type ApiResponse<T> = {
@@ -58,12 +60,21 @@ async function getJson<T>(
   path: string,
   options?: RequestInit,
 ): Promise<ApiResponse<T>> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options?.headers as Record<string, string> | undefined),
+  };
+
+  try {
+    const token = await AsyncStorage.getItem("customer_token");
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  } catch (_e) {
+    // ignore storage errors
+  }
+
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers ?? {}),
-    },
+    headers,
   });
   const data = (await res.json().catch(() => null)) as ApiResponse<T> | null;
   if (!res.ok) {
