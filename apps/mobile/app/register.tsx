@@ -1,4 +1,5 @@
-import { customerRegister } from "@/lib/api";
+import { customerRegister, customerLogin } from "@/lib/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Alert, Modal, Pressable, Text, TextInput, View } from "react-native";
@@ -49,8 +50,28 @@ export default function RegisterScreen() {
         email.trim() || undefined,
       );
       if (!data) throw new Error("注册失败");
-      Alert.alert("注册成功", `账号 ${data.id} 已创建`);
-      router.replace("/login");
+
+      // 自动使用刚注册的账号登录
+      try {
+        const loginRes = await customerLogin(phone.trim(), password);
+      if (loginRes && loginRes.token && loginRes.customer) {
+          await AsyncStorage.setItem("customer_token", String(loginRes.token));
+          await AsyncStorage.setItem(
+            "customer_info",
+            JSON.stringify(loginRes.customer),
+          );
+          Alert.alert("注册并登录成功", "已使用新账号登录");
+          router.replace("/(tabs)/profile");
+        } else {
+          // fallback
+          Alert.alert("注册成功", `账号 ${data.id} 已创建`);
+          router.replace("/login");
+        }
+      } catch (le: any) {
+        // 注册成功但登录失败
+        Alert.alert("注册成功", `账号 ${data.id} 已创建，请手动登录`);
+        router.replace("/login");
+      }
     } catch (e: any) {
       Alert.alert("注册失败", e?.message || String(e));
     } finally {
