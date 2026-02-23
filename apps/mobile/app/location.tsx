@@ -1,5 +1,5 @@
 /**
- * 位置选择页（极致排版与交互版）
+ * 位置选择页（极致排版与交互版 + 高德定位逻辑合并版）
  */
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -7,8 +7,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import FilterBottomSheet from "@/components/hotel/FilterBottomSheet";
-import { IconSymbol } from "@/components/ui/icon-symbol";
 import TopNavBar from "@/components/ui/top-nav-bar";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import { fetchLocationSuggestions, type LocationSuggestion } from "@/lib/api";
 import {
   parseReverseGeocode,
   reverseGeocodeWithProvider,
@@ -19,23 +20,30 @@ import { setSearchSession } from "@/lib/search-session";
 const HOT_CITIES = ["扬州", "上海", "北京", "南京", "杭州", "广州", "深圳", "成都"];
 const HOT_AREAS = ["外滩", "陆家嘴", "西湖", "新街口", "夫子庙", "瘦西湖", "春熙路", "天河城"];
 const HISTORY_ITEMS = ["东关街", "万象城", "近地铁", "亲子房"];
-const SUGGESTIONS = [
-  { city: "上海", label: "外滩" },
-  { city: "上海", label: "陆家嘴" },
-  { city: "杭州", label: "西湖" },
-  { city: "南京", label: "新街口" },
-  { city: "南京", label: "夫子庙" },
-  { city: "扬州", label: "瘦西湖" },
-  { city: "扬州", label: "东关街" },
-];
 const REGION_URLS = [
   "https://fastly.jsdelivr.net/npm/china-area-data@5.0.0/pcaa.json",
   "https://cdn.jsdelivr.net/npm/china-area-data@5.0.0/pcaa.json",
   "https://unpkg.com/china-area-data@5.0.0/pcaa.json",
 ];
+const MUNICIPALITY_PREFIXES = new Set(["11", "12", "31", "50"]);
 
 type RegionNode = { code: string; name: string; children?: RegionNode[] };
 type RegionLevel = "province" | "city" | "county";
+
+function normalizeCityLevelLabelForMunicipality(
+  provinceCode: string,
+  provinceName: string,
+  cityName: string,
+) {
+  const normalizedCityName = stripCityCountySuffix(cityName || "");
+  if (
+    MUNICIPALITY_PREFIXES.has(String(provinceCode || "").slice(0, 2)) &&
+    ["市辖区", "县"].includes(String(cityName || "").trim())
+  ) {
+    return stripCityCountySuffix(provinceName || "") || normalizedCityName;
+  }
+  return normalizedCityName;
+}
 
 const FALLBACK_REGION_TREE: RegionNode[] = [
   {
@@ -114,7 +122,11 @@ function parsePcaaToTree(raw: unknown): RegionNode[] {
         .sort((a, b) => Number(a) - Number(b));
       return {
         code: cCode,
-        name: stripCityCountySuffix(cityMap[cCode] || ""),
+        name: normalizeCityLevelLabelForMunicipality(
+          pCode,
+          provinceMap[pCode] || "",
+          cityMap[cCode] || "",
+        ),
         children: countyCodes.map((dCode) => ({
           code: dCode,
           name: countyMap[dCode] || "",
@@ -150,7 +162,11 @@ function parsePcaaObjectToTree(raw: unknown): RegionNode[] {
       );
       return {
         code: cCode,
-        name: stripCityCountySuffix(cityMap[cCode] || ""),
+        name: normalizeCityLevelLabelForMunicipality(
+          pCode,
+          provinces[pCode] || "",
+          cityMap[cCode] || "",
+        ),
         children: countyCodes.map((dCode) => ({
           code: dCode,
           name: countyMap[dCode] || "",
@@ -221,6 +237,8 @@ export default function LocationScreen() {
 
   const [keyword, setKeyword] = useState("");
   const [historyItems, setHistoryItems] = useState(HISTORY_ITEMS);
+  const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [locatedCity, setLocatedCity] = useState("");
@@ -296,6 +314,9 @@ export default function LocationScreen() {
   const selectedProvince = provinceOptions.find((x) => x.code === provinceCode);
   const selectedCity = cityOptions.find((x) => x.code === cityCode);
   const selectedCounty = countyOptions.find((x) => x.code === countyCode);
+  const selectedReturnCity = stripCityCountySuffix(
+    selectedCounty?.name || selectedCity?.name || String(city || ""),
+  );
 
   const handleBack = () => {
     const chosen = stripCityCountySuffix(
@@ -347,6 +368,7 @@ export default function LocationScreen() {
     });
   };
 
+  // 👉 核心逻辑融合点：保留师兄的高德 API 错误处理和数据提取逻辑
   const handleLocate = async () => {
     setErrorText("");
     setLocating(true);
@@ -361,19 +383,41 @@ export default function LocationScreen() {
         pos.coords.latitude,
         pos.coords.longitude,
       );
-      const info = via.reverse as Location.LocationGeocodedAddress[];
-      const parsed = parseReverseGeocode(info?.[0]);
       
-      if (!info?.[0]) {
-        setErrorText("无法解析坐标，请手动选择。");
+      const info = via.reverse as Location.LocationGeocodedAddress[];
+      const provider = via.provider;
+      const normalized = via.normalized || {};
+
+      if (__DEV__)
+        console.log("[location-page-locate:raw]", {
+          provider,
+          coords: pos.coords,
+          reverse: info,
+          normalized: via.normalized,
+        });
+
+      const parsed = parseReverseGeocode(info?.[0]);
+      if (__DEV__) console.log("[location-page-locate:parsed]", parsed);
+
+      const nextCity = stripCityCountySuffix(
+        String(normalized.cityOrCounty || parsed.cityOrCounty || ""),
+      );
+      const nextStreet = String(normalized.street || parsed.detailText || "").trim();
+
+      if (!nextCity) {
+        setErrorText(
+          "已获取坐标，但未获取到地址。可用省市县下拉或手动输入。",
+        );
         setLocatedCity("");
-        setLocatedDetail(`纬度: ${pos.coords.latitude.toFixed(4)}`);
+        setLocatedDetail("");
       } else {
-        setLocatedCity(parsed.cityOrCounty || "");
-        setLocatedDetail(parsed.detailText || "");
+        setLocatedCity(nextCity);
+        setLocatedDetail(nextStreet);
       }
     } catch {
-      setErrorText("定位失败，请检查网络或权限设置");
+      setErrorText("定位失败，请重试");
+      setLocatedCity("");
+      setLocatedDetail("");
     } finally {
       setLocating(false);
     }
@@ -398,10 +442,88 @@ export default function LocationScreen() {
     navigateWithSelection(selectedCityName, selectedLocation);
   };
 
-  const suggestions = useMemo(() => {
-    if (!keyword.trim()) return [];
-    return SUGGESTIONS.filter((item) => item.label.includes(keyword.trim()));
-  }, [keyword]);
+  const localSuggestionFallback = useMemo(() => {
+    const q = keyword.trim();
+    if (!q) return [] as LocationSuggestion[];
+    const qLower = q.toLowerCase();
+    const seen = new Set<string>();
+    const out: LocationSuggestion[] = [];
+
+    const push = (item: LocationSuggestion) => {
+      const cityName = stripCityCountySuffix(item.city || "");
+      const label = String(item.label || "").trim();
+      if (!label) return;
+      const key = `${item.type}|${cityName}|${label}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ ...item, city: cityName });
+    };
+
+    for (const c of HOT_CITIES) {
+      if (c.toLowerCase().includes(qLower)) {
+        push({ type: "city", city: c, label: stripCityCountySuffix(c) });
+      }
+    }
+    for (const area of HOT_AREAS) {
+      if (area.toLowerCase().includes(qLower)) {
+        push({
+          type: "scenic",
+          city: selectedReturnCity || stripCityCountySuffix(String(city || "上海")),
+          label: area,
+        });
+      }
+    }
+    for (const p of regionTree) {
+      for (const c of p.children || []) {
+        const cityName = stripCityCountySuffix(c.name);
+        if (cityName.toLowerCase().includes(qLower)) {
+          push({ type: "city", city: cityName, label: cityName });
+        }
+        for (const d of c.children || []) {
+          const countyName = stripCityCountySuffix(d.name);
+          if (countyName.toLowerCase().includes(qLower)) {
+            push({ type: "area", city: cityName, label: countyName });
+          }
+        }
+      }
+      if (out.length >= 12) break;
+    }
+
+    return out.slice(0, 12);
+  }, [keyword, regionTree, selectedReturnCity, city]);
+
+  useEffect(() => {
+    const q = keyword.trim();
+    if (!q) {
+      setSuggestions([]);
+      setSuggestionsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setSuggestionsLoading(true);
+      try {
+        const list = await fetchLocationSuggestions({
+          q,
+          city: selectedReturnCity || stripCityCountySuffix(String(city || "")),
+          limit: 12,
+        });
+        if (cancelled) return;
+        setSuggestions(list);
+      } catch {
+        if (cancelled) return;
+        setSuggestions(localSuggestionFallback);
+      } finally {
+        if (!cancelled) setSuggestionsLoading(false);
+      }
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [keyword, city, selectedReturnCity, localSuggestionFallback]);
 
   const activeOptions =
     activeLevel === "province"
@@ -418,11 +540,12 @@ export default function LocationScreen() {
 
   return (
     <View className="flex-1 bg-white">
-      <TopNavBar title="地点选择" onBack={handleBack} />
+      {/* 结合了师兄修改的标题 */}
+      <TopNavBar title="地点选择 / 定位" onBack={handleBack} />
       
       <ScrollView className="flex-1 px-4" keyboardShouldPersistTaps="handled">
         
-        {/* 1. 顶部搜索框 */}
+        {/* 1. 顶部搜索框 (完全保留你的 UI) */}
         <View className="mt-3 flex-row items-center rounded-full bg-slate-100/80 px-4 py-2.5">
           <IconSymbol size={16} name="magnifyingglass" color="#94A3B8" />
           <TextInput
@@ -449,11 +572,13 @@ export default function LocationScreen() {
           <View className="mt-6">
             <Text className="text-[14px] font-bold text-slate-800 mb-3">输入联想</Text>
             {suggestions.length === 0 ? (
-              <Text className="text-[13px] text-slate-400">暂无匹配结果，可直接点击键盘回车搜索</Text>
+              <Text className="text-[13px] text-slate-400">
+                {suggestionsLoading ? "搜索中..." : "暂无匹配结果，可直接点击键盘回车搜索"}
+              </Text>
             ) : (
               suggestions.map((item) => (
                 <Pressable
-                  key={`${item.city}-${item.label}`}
+                  key={`${item.type}-${item.city}-${item.label}`}
                   onPress={() => handleSelect(stripCityCountySuffix(item.city), item.label)}
                   className="mt-2 flex-row items-center rounded-xl bg-slate-50 px-4 py-3.5 border border-slate-100"
                 >
@@ -461,8 +586,18 @@ export default function LocationScreen() {
                   <Text className="ml-2 text-[15px] font-bold text-slate-700">
                     {item.label}
                   </Text>
+                  {/* 👉 核心显示融合点：加入了师兄添加的标签后缀逻辑 */}
                   <Text className="ml-2 text-[12px] font-medium text-slate-400">
                     {item.city}
+                    {item.type === "hotel"
+                      ? " · 酒店"
+                      : item.type === "scenic"
+                        ? " · 景点/商圈"
+                        : item.type === "area"
+                          ? " · 区县"
+                          : item.type === "city"
+                            ? " · 城市"
+                            : ""}
                   </Text>
                 </Pressable>
               ))
@@ -470,7 +605,7 @@ export default function LocationScreen() {
           </View>
         ) : (
           <>
-            {/* === 2. 核心调整：把定位和省市区切换放在一起 === */}
+            {/* === 2. 定位与省市区切换 (完全保留你的精美排版) === */}
             <View className="mt-6 flex-row items-center justify-between mb-3">
               <Text className="text-[14px] font-bold text-slate-800">当前定位与切换</Text>
             </View>
@@ -534,7 +669,7 @@ export default function LocationScreen() {
               ) : null}
             </View>
 
-            {/* === 3. 标签区域 (扁平化、纯色底、去边框) === */}
+            {/* === 3. 标签区域 (保留你的无边框圆润排版) === */}
             {historyItems.length > 0 ? (
               <View className="mt-7">
                 <View className="mb-3 flex-row items-center justify-between">
@@ -549,7 +684,6 @@ export default function LocationScreen() {
                     <Pressable
                       key={item}
                       onPress={() => handleSelect(stripCityCountySuffix(String(city || "上海")), item)}
-                      // 核心修改：移除 border，采用极浅灰底色，缩小上下 padding
                       className="rounded-full bg-[#F4F5F8] px-3.5 py-1.5 active:bg-slate-200"
                     >
                       <Text className="text-[12px] text-[#333333]">{item}</Text>

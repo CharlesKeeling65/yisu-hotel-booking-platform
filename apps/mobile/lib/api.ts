@@ -12,7 +12,17 @@ type ApiResponse<T> = {
 
 export type ReverseGeocodePayload = {
   provider: string;
-  reverse: Array<{
+  normalized?: {
+    provider?: string;
+    province?: string;
+    city?: string;
+    district?: string;
+    cityOrCounty?: string;
+    street?: string;
+    displayText?: string;
+    hasResult?: boolean;
+  };
+  reverse: {
     region?: string;
     city?: string;
     district?: string;
@@ -20,7 +30,14 @@ export type ReverseGeocodePayload = {
     name?: string;
     subregion?: string;
     streetNumber?: string;
-  }>;
+  }[];
+};
+
+export type LocationSuggestion = {
+  type: "city" | "area" | "scenic" | "hotel" | string;
+  city: string;
+  county?: string;
+  label: string;
 };
 
 export type ListParams = {
@@ -151,6 +168,21 @@ export async function fetchReverseGeocode(lat: number, lon: number) {
     `/api/geocode/reverse?${search.toString()}`,
   );
   return res.data ?? { provider: "none", reverse: [] };
+}
+
+export async function fetchLocationSuggestions(params: {
+  q: string;
+  city?: string;
+  limit?: number;
+}) {
+  const search = new URLSearchParams();
+  search.set("q", params.q);
+  if (params.city) search.set("city", params.city);
+  if (params.limit) search.set("limit", String(params.limit));
+  const res = await getJson<LocationSuggestion[]>(
+    `/api/location/suggest?${search.toString()}`,
+  );
+  return res.data ?? [];
 }
 
 export type MobileOrder = {
