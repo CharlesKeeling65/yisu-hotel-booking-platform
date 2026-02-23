@@ -61,6 +61,9 @@ const GEO_TIMEOUT_MS = Math.max(
   Number(process.env.GEO_TIMEOUT_MS || 4500),
 );
 const AMAP_WEB_KEY = String(process.env.AMAP_WEB_KEY || "");
+const GEO_PROVIDER_MODE = String(process.env.GEO_PROVIDER_MODE || "auto")
+  .trim()
+  .toLowerCase();
 
 async function fetchJsonWithTimeout(
   url,
@@ -152,6 +155,18 @@ async function reverseByAmap(lat, lon) {
 }
 
 async function reverseGeocodeByStrategy(lat, lon) {
+  if (GEO_PROVIDER_MODE === "amap_only") {
+    return (await reverseByAmap(lat, lon)) || { provider: "none", reverse: [] };
+  }
+
+  if (GEO_PROVIDER_MODE === "amap") {
+    return (
+      (await reverseByAmap(lat, lon)) ||
+      (await reverseByNominatim(lat, lon)) ||
+      (await reverseByBigDataCloud(lat, lon)) || { provider: "none", reverse: [] }
+    );
+  }
+
   return (
     (await reverseByNominatim(lat, lon)) ||
     (await reverseByBigDataCloud(lat, lon)) ||
