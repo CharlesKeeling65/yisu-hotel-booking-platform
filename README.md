@@ -3,11 +3,13 @@
 > 最后梳理日期：2026-02-24
 
 本项目是一个三端一体的酒店预订系统：
+
 - 用户端移动应用（Expo + React Native）
 - 商户/管理员 Web 管理端（React + Vite）
 - 后端 API（Express + MySQL）
 
 仓库采用 Monorepo 管理，目录如下：
+
 - `apps/mobile`：移动端（用户搜索、列表、详情、下单、订单、定位）
 - `apps/web`：Web 管理端（登录注册、酒店管理、审核发布、房型管理）
 - `apps/api`：后端服务（鉴权、酒店、房型、审核、订单、定位与联想）
@@ -18,10 +20,9 @@
 ## 1. 技术栈（当前实际）
 
 - Mobile：Expo Router + React Native 0.81 + TypeScript + NativeWind
-- Web：React 19 + Vite + React Router + Tailwind + Radix UI
-- API：Node.js + Express + mysql2 + dotenv
+- Web：React 19 + Vite + React Router + Tailwind + Shadcn UI
+- API：Node.js
 - DB：MySQL 8（建议 docker-compose 启动）
-- Monorepo：npm workspaces
 
 ## 2. 已实现功能梳理（基于当前代码）
 
@@ -135,6 +136,7 @@
 - 实际栈：React/Vite + Expo + Express + MySQL
 
 对比结论：
+
 - 业务主链路（搜索、详情、下单、审核发布）已按目标方向落地
 - 架构层目标（统一契约、强 RBAC、实时同步、系统化测试）尚未完全达到计划中的工程化标准
 
@@ -192,6 +194,7 @@ GEO_TIMEOUT_MS=4500
 ```
 
 说明：
+
 - `AMAP_WEB_KEY` 仅放在后端 `.env`，不要下发到移动端/Web 端。
 - Web 端通过 Vite 代理访问 `/api`。
 - 移动端当前 `apps/mobile/lib/api.ts` 默认请求 `http://localhost:3000`，真机调试需改为局域网 IP。
@@ -211,6 +214,7 @@ GEO_TIMEOUT_MS=4500
   - `sql/add_20_hotels_data.sql`
 
 关键影响：
+
 - `Customer` 表重启 API 后不会被清空，适合移动端登录态与回归测试。
 - `User` 内置测试账号会被 upsert，密码与资料会回到代码中的默认值。
 - 酒店种子数据仅在酒店数量不足时补种，不是每次都全量重置。
@@ -237,6 +241,7 @@ npm test
 ```
 
 当前会执行：
+
 - Web：`vite build`
 - API：`node --check server.js`
 - Mobile：`expo lint`
@@ -253,5 +258,6 @@ npm test
 ---
 
 如需查看任务目标，请直接参考：
+
 - `Task_requirements/original_task_requirements.md`
 - `Task_requirements/plan.md`
