@@ -55,8 +55,8 @@ services:
 
   mobile-web:
     build:
-      context: ./apps/mobile
-      dockerfile: Dockerfile.web
+      context: .
+      dockerfile: apps/mobile/Dockerfile.web
       args:
         EXPO_PUBLIC_API_BASE_URL: ""
     restart: unless-stopped
