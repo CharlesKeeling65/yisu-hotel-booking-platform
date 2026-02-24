@@ -3,6 +3,7 @@ import path from "path";
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  base: process.env.VITE_BASE_PATH || "/",
   plugins: [react()],
   // 仅保留 shadcn 需要的路径别名
   resolve: {

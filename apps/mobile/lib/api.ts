@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_BASE_URL =
   String(process.env.EXPO_PUBLIC_API_BASE_URL || "").trim() ||
-  "http://localhost:3000";
+  (typeof window !== "undefined" ? "" : "http://localhost:3000");
 
 type ApiResponse<T> = {
   code: number;
