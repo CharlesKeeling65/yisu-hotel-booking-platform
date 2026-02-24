@@ -3,7 +3,9 @@ FROM node:24-alpine AS build
 WORKDIR /app
 
 COPY package.json ./
-RUN npm install --no-audit --no-fund --progress=false --maxsockets=1
+RUN npm install --no-audit --no-fund --progress=false \
+  --maxsockets=4 --fetch-retries=5 \
+  --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 
 COPY . .
 RUN npm run build
