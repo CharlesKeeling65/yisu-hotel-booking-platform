@@ -47,7 +47,7 @@ services:
       context: ./apps/web
       dockerfile: Dockerfile
       args:
-        VITE_BASE_PATH: /web/
+        VITE_BASE_PATH: /
     restart: unless-stopped
     depends_on:
       api:
