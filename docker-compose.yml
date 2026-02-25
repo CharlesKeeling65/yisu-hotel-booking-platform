@@ -75,8 +75,25 @@ services:
       - "${WEB_HTTP_PORT:-80}:80"
       - "${WEB_HTTPS_PORT:-443}:443"
     volumes:
-      - ./deploy/nginx/gateway.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./apps/web/certs:/etc/nginx/certs:ro
+      - ${GATEWAY_CONF:-./deploy/nginx/gateway.conf}:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/certbot/conf:/etc/letsencrypt:ro
+      - ./deploy/certbot/www:/var/www/certbot:ro
+
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - ./deploy/certbot/conf:/etc/letsencrypt
+      - ./deploy/certbot/www:/var/www/certbot
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        trap exit TERM
+        while :; do
+          certbot renew --webroot -w /var/www/certbot --quiet || true
+          sleep 12h
+        done
 
 volumes:
   yisu_mysql_data:
