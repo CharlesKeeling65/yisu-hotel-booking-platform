@@ -1,38 +1,33 @@
 /**
- * 酒店详情页
- * 核心流程：
- * 1) 根据路由 id 拉取单酒店详情
- * 2) 轮播展示酒店图片
- * 3) 展示设施与房型，并支持改入住日期
+ * 酒店详情与房型预订页
  */
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    Pressable,
-    ScrollView,
-    Text,
-    useWindowDimensions,
-    View,
+  Pressable,
+  ScrollView,
+  Text,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import DateRangePickerSheet from "@/components/hotel/DateRangePickerSheet";
-import GuestCompactBadge from "@/components/hotel/GuestCompactBadge";
 import GuestPickerSheet, {
-    GuestDraft,
+  GuestDraft,
 } from "@/components/hotel/GuestPickerSheet";
 import RoomList from "@/components/hotel/RoomList";
+import { IconSymbol } from "@/components/ui/icon-symbol";
 import MeasuredPagingCarousel from "@/components/ui/measured-paging-carousel";
 import { fetchMobileHotelById } from "@/lib/api";
 import {
-    getDefaultSearchSession,
-    setSearchSession,
+  getDefaultSearchSession,
+  setSearchSession,
 } from "@/lib/search-session";
 import type { Hotel, Room } from "@yisu/shared";
 
-function toCnMonthDay(s: string) {
-  // 将 yyyy-mm-dd 转为 mm月dd日，提升可读性
+function toShortDate(s: string) {
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return s;
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -135,13 +130,10 @@ export default function HotelDetailScreen() {
   const nights = useMemo(() => {
     const diff = Math.ceil(
       (new Date(checkOutDate).getTime() - new Date(checkInDate).getTime()) /
-        (1000 * 60 * 60 * 24),
+      (1000 * 60 * 60 * 24),
     );
     return Math.max(1, diff);
   }, [checkInDate, checkOutDate]);
-  const weekFontSize = width < 380 ? 10 : 11;
-  const dateFontSize = width < 380 ? 14 : 15;
-  const nightsFontSize = width < 380 ? 11 : 12;
 
   const images = useMemo(() => {
     if (!hotel)
@@ -149,10 +141,11 @@ export default function HotelDetailScreen() {
     return hotel.images?.length
       ? hotel.images
       : [
-          hotel.coverImage ||
-            "https://picsum.photos/seed/hotel_detail_fallback/1400/700",
-        ];
+        hotel.coverImage ||
+        "https://picsum.photos/seed/hotel_detail_fallback/1400/700",
+      ];
   }, [hotel]);
+
   const star = Math.max(
     1,
     Math.min(5, Number(hotel?.starLevel || hotel?.rating || 0)),
@@ -160,7 +153,6 @@ export default function HotelDetailScreen() {
   const starText = "★".repeat(star);
 
   useEffect(() => {
-    // 首次进入与 id 变化时，重新请求酒店详情
     if (!id) return;
     let mounted = true;
     setLoading(true);
@@ -185,11 +177,10 @@ export default function HotelDetailScreen() {
   }, [id]);
 
   const handleBack = () => {
-    // 优先返回栈，若无历史再按来源兜底。
     try {
       router.back();
       return;
-    } catch {}
+    } catch { }
     if (from === "list") {
       router.replace({
         pathname: "/list",
@@ -259,13 +250,13 @@ export default function HotelDetailScreen() {
 
   if (loading)
     return (
-      <View className="flex-1 items-center justify-center bg-neutral-50">
+      <View className="flex-1 items-center justify-center bg-[#F5F8FC]">
         <Text className="text-base text-neutral-500">加载中...</Text>
       </View>
     );
   if (!hotel)
     return (
-      <View className="flex-1 items-center justify-center bg-neutral-50">
+      <View className="flex-1 items-center justify-center bg-[#F5F8FC]">
         <Text className="text-base text-neutral-500">
           {error ? `加载失败：${error}` : "酒店不存在"}
         </Text>
@@ -273,126 +264,125 @@ export default function HotelDetailScreen() {
     );
 
   return (
-    <View className="flex-1 bg-neutral-50">
+    <View className="flex-1 bg-[#F5F8FC]">
+      <View
+        className="absolute left-0 right-0 z-20 px-2 pb-2"
+        style={{ paddingTop: insets.top + 8 }}
+      >
+        <Pressable
+          onPress={handleBack}
+          className="h-9 w-9 items-center justify-center rounded-full bg-black/40 backdrop-blur-md"
+        >
+          <Text className="text-2xl font-light text-white leading-none mt-[-2px]">‹</Text>
+        </Pressable>
+      </View>
+
       <ScrollView
-        className="flex-1 bg-neutral-50"
-        contentContainerStyle={{
-          paddingTop: insets.top + 54,
-          paddingBottom: 96,
-        }}
-        showsVerticalScrollIndicator={true}
-        persistentScrollbar={true}
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 96 }}
+        showsVerticalScrollIndicator={false}
       >
         <MeasuredPagingCarousel
           data={images}
           autoPlayMs={5000}
-          slideHeight={210}
-          containerClassName="overflow-hidden rounded-3xl mx-4 bg-slate-200"
+          slideHeight={280}
+          containerClassName="bg-slate-200"
           keyExtractor={(image, idx) => `${idx}-${image}`}
           renderSlide={(image, _idx, width) => (
             <Image
               source={{ uri: image }}
-              style={{ width, height: 210 }}
+              style={{ width, height: 280 }}
               contentFit="cover"
             />
           )}
         />
 
-        <View className="px-4 pt-4">
-          <View className="flex-1 pr-3">
-            <View className="flex-row items-center justify-between">
-              <Text className="text-2xl font-semibold text-neutral-900">
+        {/* 酒店基础信息 */}
+        <View className="relative -mt-6 rounded-t-[24px] bg-white px-4 pt-6 pb-5 shadow-sm shadow-slate-200">
+          <View className="flex-row items-start justify-between">
+            <View className="flex-1 pr-4">
+              <Text className="text-[22px] font-extrabold text-slate-900 leading-tight">
                 {hotel.name}
               </Text>
-              <Text className="text-sm tracking-[1px] text-amber-600">
-                {starText}
-              </Text>
+              {hotel.nameEn ? (
+                <Text className="mt-1 text-[11px] font-medium text-slate-400 uppercase tracking-widest">
+                  {hotel.nameEn}
+                </Text>
+              ) : null}
             </View>
-            {hotel.nameEn ? (
-              <Text className="mt-0 text-sm text-neutral-500">
-                {hotel.nameEn}
-              </Text>
-            ) : null}
+            <View className="mt-1 flex-row">
+              <Text className="text-[12px] tracking-[2px] text-amber-500">{starText}</Text>
+            </View>
           </View>
 
-          <Text className="mt-2 text-sm text-neutral-500">
-            {getDisplayAddress(hotel)}
-          </Text>
+          <View className="mt-3 flex-row items-center">
+            <IconSymbol size={14} name="location.fill" color="#94A3B8" />
+            <Text className="ml-1 text-[13px] font-medium text-slate-600" numberOfLines={1}>
+              {getDisplayAddress(hotel)}
+            </Text>
+          </View>
 
           <View className="mt-4 flex-row flex-wrap gap-2">
             {(hotel.tags || []).map((tag) => (
-              <View key={tag} className="rounded-full bg-neutral-100 px-3 py-1">
-                <Text className="text-xs text-neutral-600">{tag}</Text>
+              <View key={tag} className="rounded-md bg-slate-50 border border-slate-100 px-2 py-0.5">
+                <Text className="text-[11px] font-medium text-slate-600">{tag}</Text>
               </View>
             ))}
           </View>
+        </View>
 
-          <View className="mt-5 flex-row items-center gap-2">
+        {/* 订房条件筛选区 */}
+        <View className="px-3 pt-3 pb-6">
+          <View className="flex-row items-center rounded-2xl bg-white px-2 py-1 shadow-sm shadow-slate-100">
+
             <Pressable
-              className="h-14 min-w-0 flex-[7] rounded-xl border border-[#D8E8FA] bg-[#F7FBFF] px-2.5 py-2 justify-center"
+              className="flex-[6.5] flex-row items-center justify-between px-2 py-3 rounded-xl active:bg-slate-50"
               onPress={() => setIsCalendarOpen(true)}
             >
-              <View className="flex-row items-center justify-between">
-                <View className="min-w-0 flex-1 flex-row items-end">
-                  <View className="min-w-0 items-start">
-                    <Text
-                      style={{ fontSize: weekFontSize, color: "#6B8FA8" }}
-                      numberOfLines={1}
-                    >
-                      {getDateMetaLabel(checkInDate)}
-                    </Text>
-                    <Text
-                      className="mt-0.5 font-semibold text-[#183B56]"
-                      style={{ fontSize: dateFontSize }}
-                      numberOfLines={1}
-                    >
-                      {toCnMonthDay(checkInDate)}
-                    </Text>
-                  </View>
-                  <Text
-                    className="mx-2 font-medium text-[#8FA8BA]"
-                    style={{
-                      fontSize: dateFontSize,
-                      lineHeight: dateFontSize + 2,
-                    }}
-                  >
-                    -
-                  </Text>
-                  <View className="min-w-0 items-start">
-                    <Text
-                      style={{ fontSize: weekFontSize, color: "#6B8FA8" }}
-                      numberOfLines={1}
-                    >
-                      {getDateMetaLabel(checkOutDate)}
-                    </Text>
-                    <Text
-                      className="mt-0.5 font-semibold text-[#183B56]"
-                      style={{ fontSize: dateFontSize }}
-                      numberOfLines={1}
-                    >
-                      {toCnMonthDay(checkOutDate)}
-                    </Text>
-                  </View>
+              <View className="flex-row items-center flex-1 justify-between">
+                <View className="items-start">
+                  <Text className="text-[11px] text-slate-500 font-medium mb-1">{getDateMetaLabel(checkInDate)}入住</Text>
+                  <Text className="text-[16px] font-black text-slate-900">{toShortDate(checkInDate)}</Text>
                 </View>
-                <Text
-                  className="ml-2 shrink-0 font-semibold text-[#245F8B]"
-                  style={{ fontSize: nightsFontSize }}
-                >
-                  {nights}晚
-                </Text>
+
+                <View className="items-center px-1">
+                  <Text className="text-[10px] font-bold text-[#1890FF] bg-[#E6F4FF] px-2 py-0.5 rounded-full">
+                    {nights}晚
+                  </Text>
+                </View>
+
+                <View className="items-start">
+                  <Text className="text-[11px] text-slate-500 font-medium mb-1">{getDateMetaLabel(checkOutDate)}离店</Text>
+                  <Text className="text-[16px] font-black text-slate-900">{toShortDate(checkOutDate)}</Text>
+                </View>
               </View>
             </Pressable>
-            <View className="h-14 flex-[3] rounded-xl border border-[#D8E8FA] bg-[#F7FBFF] px-1 justify-center">
-              <GuestCompactBadge
-                rooms={roomCount}
-                adults={adultCount}
-                childCount={childCount}
-                onPress={() => setIsGuestOpen(true)}
-                flat
-              />
-            </View>
+
+            <View className="mx-1 h-10 w-[1px] bg-slate-100" />
+
+            <Pressable
+              className="flex-[3.5] flex-row items-center justify-between py-2 pl-3 pr-2 rounded-xl active:bg-slate-50"
+              onPress={() => setIsGuestOpen(true)}
+            >
+              <View className="items-start">
+                <View className="flex-row items-center mb-1">
+                  <IconSymbol size={13} name="bed.double.fill" color="#1890FF" />
+                  <Text className="ml-1.5 text-[15px] font-extrabold text-slate-900 mt-[-1px]">
+                    {roomCount} 间
+                  </Text>
+                </View>
+                <View className="flex-row items-center">
+                  <IconSymbol size={12} name="person.fill" color="#94A3B8" />
+                  <Text className="ml-1.5 text-[11px] font-medium text-slate-500 mt-[-1px]">
+                    {adultCount} 成人 {childCount} 儿童
+                  </Text>
+                </View>
+              </View>
+              <Text className="text-[16px] text-slate-300 font-light mb-1">›</Text>
+            </Pressable>
           </View>
 
+          {/* 房型列表 */}
           <View className="mt-3">
             <RoomList
               rooms={[...(hotel.rooms || [])].sort((a, b) => a.price - b.price)}
@@ -401,6 +391,7 @@ export default function HotelDetailScreen() {
           </View>
         </View>
 
+        {/* 弹窗组件 */}
         <DateRangePickerSheet
           visible={isCalendarOpen}
           checkInDate={checkInDate}
@@ -412,6 +403,7 @@ export default function HotelDetailScreen() {
           }) => {
             setCheckInDate(nextCheckIn);
             setCheckOutDate(nextCheckOut);
+            setIsCalendarOpen(false);
           }}
         />
         <GuestPickerSheet
@@ -432,23 +424,6 @@ export default function HotelDetailScreen() {
           }}
         />
       </ScrollView>
-
-      <View
-        className="absolute left-0 right-0 z-20 border-b border-slate-100 bg-white/95 px-4 pb-2"
-        style={{ paddingTop: insets.top + 8 }}
-      >
-        <View className="flex-row items-center">
-          <Pressable onPress={handleBack} className="mr-1.5 py-1 pr-1">
-            <Text className="text-sm font-semibold text-[#1890FF]">‹ 返回</Text>
-          </Pressable>
-          <Text
-            className="flex-1 text-base font-semibold text-slate-900"
-            numberOfLines={1}
-          >
-            {hotel.name}
-          </Text>
-        </View>
-      </View>
     </View>
   );
 }

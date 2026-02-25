@@ -6,31 +6,49 @@
  * - 支持下拉刷新
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Modal,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fetchMobileOrders, type MobileOrder } from "@/lib/api";
+import {
+  cancelMobileOrder,
+  fetchMobileOrders,
+  payMobileOrder,
+  type MobileOrder,
+} from "@/lib/api";
 
-type StatusKey = "all" | "pending" | "upcoming" | "completed";
+type StatusKey = "all" | "unpaid" | "paid" | "cancelled" | string;
 
 const STATUS_TABS: Array<{ key: StatusKey; label: string }> = [
   { key: "all", label: "全部" },
-  { key: "pending", label: "待付款" },
-  { key: "upcoming", label: "未出行" },
-  { key: "completed", label: "待点评" },
+  { key: "unpaid", label: "未支付" },
+  { key: "paid", label: "已支付" },
+  { key: "cancelled", label: "已取消" },
 ];
 
-function OrderCard({ order }: { order: MobileOrder }) {
+function OrderCard({
+  order,
+  onPay,
+  onView,
+  onCancel,
+}: {
+  order: MobileOrder;
+  onPay?: (o: MobileOrder) => void;
+  onView?: (o: MobileOrder) => void;
+  onCancel?: (o: MobileOrder) => void;
+}) {
   const dateText =
     order.checkIn && order.checkOut
       ? `${order.checkIn}至${order.checkOut}`
@@ -44,11 +62,10 @@ function OrderCard({ order }: { order: MobileOrder }) {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeaderRow}>
-        <Text style={styles.cardType}>酒店</Text>
         <Text style={[styles.statusTag]}>{order.statusLabel}</Text>
       </View>
       <Text style={styles.hotelName} numberOfLines={2}>
-        {order.hotelName || "酒店名称加载中"}
+        {order.hotelName || ""}
       </Text>
       <Text style={styles.hotelAddr} numberOfLines={1}>
         {order.hotelCity || order.hotelCounty
@@ -61,9 +78,70 @@ function OrderCard({ order }: { order: MobileOrder }) {
       </View>
       <View style={styles.footerRow}>
         <Text style={styles.tipText}>
-          {order.paymentStatus === "unpaid" ? "延迟付款" : "已支付"}
+          {order.statusLabel ||
+            (order.paymentStatus === "unpaid" ? "未支付" : "已支付")}
         </Text>
         <Text style={styles.amountText}>{amountText}</Text>
+      </View>
+      <View
+        style={{
+          marginTop: 10,
+          flexDirection: "row",
+          justifyContent: "flex-end",
+          gap: 8,
+        }}
+      >
+        <Pressable
+          onPress={() => {
+            if (onView) onView(order);
+          }}
+          style={{
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: "#E5E7EB",
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            marginRight: 8,
+          }}
+        >
+          <Text style={{ color: "#374151", fontWeight: "600" }}>查看订单</Text>
+        </Pressable>
+        {onCancel && order.status !== "cancelled" && (
+          <TouchableOpacity
+            onPress={() => {
+              console.log("cancel press onPress", order.id);
+              onCancel(order);
+            }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessible={true}
+            accessibilityRole="button"
+            style={{
+              backgroundColor: "#EF4444",
+              paddingVertical: 8,
+              paddingHorizontal: 14,
+              borderRadius: 8,
+              marginRight: 8,
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 10,
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "600" }}>取消订单</Text>
+          </TouchableOpacity>
+        )}
+        {order.paymentStatus === "unpaid" && onPay && (
+          <Pressable
+            onPress={() => onPay(order)}
+            style={{
+              backgroundColor: "#1890FF",
+              paddingVertical: 8,
+              paddingHorizontal: 14,
+              borderRadius: 8,
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "600" }}>去付款</Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -75,28 +153,51 @@ export default function OrdersScreen() {
 
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [orders, setOrders] = useState<MobileOrder[]>([]);
+  const [payVisible, setPayVisible] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<MobileOrder | null>(null);
+  const [processingPay, setProcessingPay] = useState(false);
+  const [successVisible, setSuccessVisible] = useState(false);
+  const [successCountdown, setSuccessCountdown] = useState(5);
+  const successTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [activeStatus, setActiveStatus] = useState<StatusKey>("all");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [confirmCancelVisible, setConfirmCancelVisible] = useState(false);
+  const [pendingCancelOrder, setPendingCancelOrder] =
+    useState<MobileOrder | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      (async () => {
+        try {
+          const info = await AsyncStorage.getItem("customer_info");
+          if (!mounted) return;
+          if (info) {
+            const parsed = JSON.parse(info);
+            if (parsed?.id) {
+              setCustomerId(String(parsed.id));
+              return;
+            }
+          }
+          // clear when no info
+          setCustomerId(null);
+        } catch {
+          // ignore
+        }
+      })();
+      return () => {
+        mounted = false;
+      };
+    }, []),
+  );
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const info = await AsyncStorage.getItem("customer_info");
-        if (!mounted) return;
-        if (info) {
-          const parsed = JSON.parse(info);
-          if (parsed?.id) {
-            setCustomerId(String(parsed.id));
-          }
-        }
-      } catch {
-        // ignore
-      }
-    })();
     return () => {
-      mounted = false;
+      if (successTimerRef.current) {
+        clearInterval(successTimerRef.current);
+        successTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -141,6 +242,64 @@ export default function OrdersScreen() {
     }
   };
 
+  const openPayFor = (order: MobileOrder) => {
+    setSelectedOrder(order);
+    setPayVisible(true);
+  };
+
+  const handleConfirmPay = async () => {
+    if (!selectedOrder || !customerId) {
+      Alert.alert("无法支付", "缺少订单或未登录");
+      return;
+    }
+    setProcessingPay(true);
+    try {
+      await payMobileOrder(selectedOrder.id, customerId);
+    } catch (e: any) {
+      Alert.alert("支付失败", e?.message || String(e));
+      setProcessingPay(false);
+      return;
+    }
+
+    setProcessingPay(false);
+    setPayVisible(false);
+    setSelectedOrder(null);
+    // 刷新列表以反映已支付状态
+    await handleRefresh();
+
+    // 显示 5s 倒计时弹窗，倒计时结束自动跳转到订单页
+    if (successTimerRef.current) {
+      clearInterval(successTimerRef.current);
+      successTimerRef.current = null;
+    }
+    setSuccessCountdown(5);
+    setSuccessVisible(true);
+    successTimerRef.current = setInterval(() => {
+      setSuccessCountdown((c) => {
+        if (c <= 1) {
+          if (successTimerRef.current) {
+            clearInterval(successTimerRef.current);
+            successTimerRef.current = null;
+          }
+          setSuccessVisible(false);
+          router.replace("/(tabs)/cart");
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+  };
+
+  const handleCancel = (order: MobileOrder) => {
+    console.log("handleCancel called", order?.id);
+    if (!customerId) {
+      Alert.alert("无法取消", "请先登录");
+      return;
+    }
+    setPendingCancelOrder(order);
+    setConfirmCancelVisible(true);
+  };
+
   const renderContent = () => {
     if (!customerId) {
       return (
@@ -179,7 +338,16 @@ export default function OrdersScreen() {
       <FlatList
         data={orders}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <OrderCard order={item} />}
+        renderItem={({ item }) => (
+          <OrderCard
+            order={item}
+            onPay={(o) => openPayFor(o)}
+            onView={(o) =>
+              router.push({ pathname: "/order/[id]", params: { id: o.id } })
+            }
+            onCancel={(o) => handleCancel(o)}
+          />
+        )}
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl
@@ -224,6 +392,239 @@ export default function OrdersScreen() {
       <View style={styles.divider} />
 
       <View style={styles.body}>{renderContent()}</View>
+      <Modal
+        visible={payVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPayVisible(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "flex-end",
+            backgroundColor: "rgba(0,0,0,0.4)",
+          }}
+        >
+          <View
+            style={{
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              backgroundColor: "#fff",
+              padding: 20,
+            }}
+          >
+            <Text
+              style={{ textAlign: "center", fontSize: 16, fontWeight: "600" }}
+            >
+              微信支付
+            </Text>
+            <Text
+              style={{
+                marginTop: 8,
+                textAlign: "center",
+                color: "#6B7280",
+                fontSize: 12,
+              }}
+            >
+              模拟微信支付（不会真实扣款）
+            </Text>
+            <Text
+              style={{
+                marginTop: 16,
+                textAlign: "center",
+                fontSize: 28,
+                color: "#10B981",
+                fontWeight: "700",
+              }}
+            >
+              ¥{selectedOrder ? selectedOrder.payableAmount.toFixed(2) : "0.00"}
+            </Text>
+
+            <View style={{ flexDirection: "row", marginTop: 20 }}>
+              <Pressable
+                style={{
+                  flex: 1,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: "#E5E7EB",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                  marginRight: 8,
+                }}
+                onPress={() => setPayVisible(false)}
+              >
+                <Text style={{ color: "#374151" }}>取消</Text>
+              </Pressable>
+              <Pressable
+                style={{
+                  flex: 1,
+                  borderRadius: 999,
+                  backgroundColor: "#1890FF",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                  marginLeft: 8,
+                }}
+                onPress={handleConfirmPay}
+                disabled={processingPay}
+              >
+                <Text style={{ color: "#fff", fontWeight: "600" }}>
+                  {processingPay ? "支付中..." : "确认支付"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={confirmCancelVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmCancelVisible(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "rgba(0,0,0,0.4)",
+            padding: 24,
+          }}
+        >
+          <View
+            style={{
+              borderRadius: 12,
+              backgroundColor: "#fff",
+              padding: 16,
+              width: "100%",
+              maxWidth: 480,
+            }}
+          >
+            <Text
+              style={{ fontSize: 16, fontWeight: "700", textAlign: "center" }}
+            >
+              确认取消订单
+            </Text>
+            <Text style={{ marginTop: 12, color: "#6B7280", lineHeight: 20 }}>
+              确认要取消该订单吗？
+            </Text>
+            <View style={{ flexDirection: "row", marginTop: 16 }}>
+              <Pressable
+                onPress={() => {
+                  setConfirmCancelVisible(false);
+                  setPendingCancelOrder(null);
+                }}
+                style={{
+                  flex: 1,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: "#E5E7EB",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                  marginRight: 8,
+                }}
+              >
+                <Text style={{ color: "#374151" }}>取消</Text>
+              </Pressable>
+              <Pressable
+                onPress={async () => {
+                  if (!pendingCancelOrder) return;
+                  console.log("confirm cancel pressed", pendingCancelOrder.id);
+                  try {
+                    console.log("cancel start", pendingCancelOrder.id);
+                    const res = await cancelMobileOrder(pendingCancelOrder.id);
+                    console.log("cancel response", res);
+                    setConfirmCancelVisible(false);
+                    setPendingCancelOrder(null);
+                    await handleRefresh();
+                    Alert.alert("取消成功", "订单已取消");
+                  } catch (e: any) {
+                    console.error("cancel error", e);
+                    Alert.alert("取消失败", e?.message || String(e));
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  borderRadius: 8,
+                  backgroundColor: "#EF4444",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "600" }}>确认</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={successVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (successTimerRef.current) {
+            clearInterval(successTimerRef.current);
+            successTimerRef.current = null;
+          }
+          setSuccessVisible(false);
+          router.replace("/(tabs)/cart");
+        }}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "rgba(0,0,0,0.4)",
+          }}
+        >
+          <View
+            style={{
+              width: "90%",
+              borderRadius: 16,
+              backgroundColor: "#fff",
+              padding: 20,
+            }}
+          >
+            <Text
+              style={{ textAlign: "center", fontSize: 16, fontWeight: "600" }}
+            >
+              支付成功
+            </Text>
+            <Text
+              style={{
+                marginTop: 8,
+                textAlign: "center",
+                color: "#6B7280",
+                fontSize: 12,
+              }}
+            >
+              已成功支付，{successCountdown} 秒后自动跳转订单页
+            </Text>
+            <View style={{ marginTop: 16 }}>
+              <Pressable
+                style={{
+                  borderRadius: 999,
+                  backgroundColor: "#1890FF",
+                  paddingVertical: 12,
+                  alignItems: "center",
+                }}
+                onPress={() => {
+                  if (successTimerRef.current) {
+                    clearInterval(successTimerRef.current);
+                    successTimerRef.current = null;
+                  }
+                  setSuccessVisible(false);
+                  router.replace("/(tabs)/cart");
+                }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "600" }}>
+                  查看订单
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

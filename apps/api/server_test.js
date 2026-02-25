@@ -1598,9 +1598,11 @@ app.get("/api/mobile/hotels", async (req, res) => {
           status: Number(x.status || 0) === 0 ? "available" : "soldout",
           breakfastIncluded: Number(x.breakfast_included || 0) === 1,
           refundable: Number(x.refundable || 1) === 1,
+          remain: Number(x.remain != null ? x.remain : x.status === 0 ? 10 : 0),
           image:
             rel.roomImageByRoom[x.id] ||
             `https://picsum.photos/seed/room_${x.id}/800/500`,
+          raw: x,
         })),
       });
     }
@@ -1640,6 +1642,7 @@ app.get("/api/mobile/hotels/:id", async (req, res) => {
         capacity: Number(x.occupancy || 2),
         bedType: inferBedType(x.name),
         size: x.size ? Number(x.size) : null,
+        remain: Number(x.remain != null ? x.remain : x.status === 0 ? 10 : 0),
         status: Number(x.status || 0) === 0 ? "available" : "soldout",
         breakfastIncluded: Number(x.breakfast_included || 0) === 1,
         refundable: Number(x.refundable || 1) === 1,

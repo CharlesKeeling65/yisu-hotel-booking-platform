@@ -9,12 +9,14 @@
  * - 新增一个页面时，先在 app 目录创建文件，再根据是否需要显式控制 header 在这里配置 Screen options。
  */
 import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
+    DarkTheme,
+    DefaultTheme,
+    ThemeProvider,
 } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { Platform } from "react-native";
+import { useEffect } from "react";
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -26,6 +28,11 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  useEffect(() => {
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      document.title = "驿宿酒店移动端";
+    }
+  }, []);
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
@@ -52,6 +59,13 @@ export default function RootLayout() {
           options={{
             headerShown: false,
             title: "预订",
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="order/[id]"
+          options={{
+            title: "我的订单",
             animation: "slide_from_right",
           }}
         />

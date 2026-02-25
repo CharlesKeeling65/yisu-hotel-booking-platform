@@ -1,26 +1,22 @@
 /**
  * 列表页（搜索结果页）
- * 关键能力：
- * 1) 接收首页传入的查询参数并回填 UI
- * 2) 支持排序与分页加载（FlatList onEndReached）
- * 3) 顶部紧凑搜索条 + 日历弹层，支持二次筛选
  */
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import CompactSearchPanel from "@/components/hotel/CompactSearchPanel";
 import DateRangePickerSheet from "@/components/hotel/DateRangePickerSheet";
 import FilterBottomSheet from "@/components/hotel/FilterBottomSheet";
 import GuestPickerSheet, { GuestDraft } from "@/components/hotel/GuestPickerSheet";
 import HotelCard from "@/components/hotel/HotelCard";
-import CompactSearchPanel from "@/components/hotel/CompactSearchPanel";
 import PriceStarPickerSheet, { PriceStarDraft } from "@/components/hotel/PriceStarPickerSheet";
-import type { Hotel } from "@yisu/shared";
+import SearchSummarySheet from "@/components/hotel/SearchSummarySheet"; // 👉 新增引入
 import { fetchMobileHotels } from "@/lib/api";
-import { parseReverseGeocode, reverseGeocodeWithProvider, stripCityCountySuffix } from "@/lib/location-utils";
+import { stripCityCountySuffix } from "@/lib/location-utils";
 import { getDefaultSearchSession, getSearchSession, setSearchSession } from "@/lib/search-session";
+import type { Hotel } from "@yisu/shared";
 
 const SORT_OPTIONS = [
   { label: "推荐", value: undefined as "price_asc" | "price_desc" | "star_desc" | undefined },
@@ -81,7 +77,7 @@ export default function ListScreen() {
       ? params.scenicSpots.split(",").map((x) => x.trim()).filter(Boolean)
       : session.scenicSpots
         ? session.scenicSpots.split(",").map((x) => x.trim()).filter(Boolean)
-      : []
+        : []
   );
 
   const [list, setList] = useState<Hotel[]>([]);
@@ -93,12 +89,14 @@ export default function ListScreen() {
   const [sort, setSort] = useState<"price_asc" | "price_desc" | "star_desc" | undefined>(params.sort || (session.sort as "price_asc" | "price_desc" | "star_desc" | undefined));
   const [locating, setLocating] = useState(false);
 
+  // 👉 弹窗控制状态
+  const [isSummarySheetOpen, setIsSummarySheetOpen] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isGuestOpen, setIsGuestOpen] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [isScenicOpen, setIsScenicOpen] = useState(false);
   const [isPriceOpen, setIsPriceOpen] = useState(false);
   const [isTagOpen, setIsTagOpen] = useState(false);
-  const [isGuestOpen, setIsGuestOpen] = useState(false);
 
   const nights = useMemo(() => {
     const diff = Math.ceil((new Date(checkOutDate).getTime() - new Date(checkInDate).getTime()) / (1000 * 60 * 60 * 24));
@@ -140,28 +138,7 @@ export default function ListScreen() {
     if (typeof params.sort === "string") setSort(params.sort);
   }, [params.city, params.location, params.keyword, params.priceStar, params.tags, params.rooms, params.adults, params.children, params.scenicSpots, params.sort, firstTag]);
 
-  async function handleLocate() {
-    // 在列表页直接定位并重载结果，减少返回首页的操作成本
-    if (locating) return;
-    setLocating(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
-      const pos = await Location.getCurrentPositionAsync({});
-      const via = await reverseGeocodeWithProvider(pos.coords.latitude, pos.coords.longitude);
-      const info = via.reverse;
-      const parsed = parseReverseGeocode(info[0]);
-      if (__DEV__) console.log("[list-locate:raw]", { provider: via.provider, coords: pos.coords, reverse: info });
-      if (__DEV__) console.log("[list-locate:parsed]", parsed);
-      setCity(parsed.cityOrCounty || city);
-      setLocation(parsed.detailText || parsed.cityOrCounty || "当前位置");
-    } finally {
-      setLocating(false);
-    }
-  }
-
   async function load(targetPage: number, append: boolean) {
-    // 统一数据加载入口：既支持首次加载，也支持分页追加
     if (append) setLoadingMore(true); else setLoading(true);
     setError("");
     try {
@@ -190,7 +167,6 @@ export default function ListScreen() {
   }
 
   useEffect(() => {
-    // 任何检索条件变化都重跑首屏查询
     load(1, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [city, location, checkInDate, checkOutDate, priceStar, tags, selectedSpots, sort, priceDraft]);
@@ -223,8 +199,8 @@ export default function ListScreen() {
         ListHeaderComponent={
           <View className="bg-neutral-50">
             <View
-              className="-mx-4 bg-white px-4 pb-3"
-              style={{ paddingTop: insets.top + 4 }}
+              className="-mx-4 bg-[#EEF3F8]"
+              style={{ paddingTop: insets.top }}
             >
               <CompactSearchPanel
                 city={city}
@@ -236,88 +212,27 @@ export default function ListScreen() {
                 adults={adults}
                 childCount={children}
                 onBackPress={() => {
-                  // 返回首页时重置排序：下次从首页进入列表默认“推荐”。
                   setSearchSession({ sort: "" });
                   try {
                     router.back();
                     return;
-                  } catch {}
+                  } catch { }
                   router.replace("/");
                 }}
-                onCityPress={() =>
-                  router.replace({
-                    pathname: "/location",
-                    params: {
-                      city,
-                      from: "list",
-                      checkIn: checkInDate,
-                      checkOut: checkOutDate,
-                      priceStar,
-                      tags,
-                      rooms: String(rooms),
-                      adults: String(adults),
-                      children: String(children),
-                      scenicSpots: selectedSpots.join(","),
-                      sort: sort || "",
-                    },
-                  })
-                }
-                onLocationPress={() =>
-                  router.replace({
-                    pathname: "/location",
-                    params: {
-                      city,
-                      location,
-                      from: "list",
-                      checkIn: checkInDate,
-                      checkOut: checkOutDate,
-                      priceStar,
-                      tags,
-                      rooms: String(rooms),
-                      adults: String(adults),
-                      children: String(children),
-                      scenicSpots: selectedSpots.join(","),
-                      sort: sort || "",
-                    },
-                  })
-                }
-                onLocationClearPress={() => {
-                  setLocation("");
-                  setTags("");
-                }}
-                onLocatePress={() => handleLocate()}
-                onDatePress={() => setIsCalendarOpen(true)}
-                onGuestPress={() => setIsGuestOpen(true)}
+                onCityPress={() => router.replace({ pathname: "/location", params: { city, from: "list" } })}
+                onLocationPress={() => router.replace({ pathname: "/location", params: { city, location, from: "list" } })}
+                onLocationClearPress={() => { setLocation(""); setTags(""); }}
+
+                onDatePress={() => setIsSummarySheetOpen(true)}
+                onGuestPress={() => setIsSummarySheetOpen(true)}
+
                 onSearch={() => load(1, false)}
                 flat
                 filterButtons={[
-                  {
-                    key: "sort",
-                    label: sortLabel,
-                    active: Boolean(sort),
-                    onPress: () => setIsSortOpen(true),
-                  },
-                  {
-                    key: "scenic",
-                    label: "附近景点",
-                    active: scenicCount > 0,
-                    count: scenicCount || undefined,
-                    onPress: () => setIsScenicOpen(true),
-                  },
-                  {
-                    key: "price",
-                    label: "价格/星级",
-                    active: priceCount > 0,
-                    count: priceCount || undefined,
-                    onPress: () => setIsPriceOpen(true),
-                  },
-                  {
-                    key: "tag",
-                    label: "标签",
-                    active: tagCount > 0,
-                    count: tagCount || undefined,
-                    onPress: () => setIsTagOpen(true),
-                  },
+                  { key: "sort", label: sortLabel, active: Boolean(sort), onPress: () => setIsSortOpen(true) },
+                  { key: "scenic", label: "附近景点", active: scenicCount > 0, count: scenicCount || undefined, onPress: () => setIsScenicOpen(true) },
+                  { key: "price", label: "价格/星级", active: priceCount > 0, count: priceCount || undefined, onPress: () => setIsPriceOpen(true) },
+                  { key: "tag", label: "标签", active: tagCount > 0, count: tagCount || undefined, onPress: () => setIsTagOpen(true) },
                 ]}
               />
             </View>
@@ -333,20 +248,9 @@ export default function ListScreen() {
                 router.push({
                   pathname: "/hotel/[id]",
                   params: {
-                    id: item.id,
-                    from: "list",
-                    city,
-                    location,
-                    checkIn: checkInDate,
-                    checkOut: checkOutDate,
-                    rooms: String(rooms),
-                    adults: String(adults),
-                    children: String(children),
-                    priceStar,
-                    tags,
-                    scenicSpots: selectedSpots.join(","),
-                    sort: sort || "",
-                    nights: String(nights),
+                    id: item.id, from: "list", city, location, checkIn: checkInDate, checkOut: checkOutDate,
+                    rooms: String(rooms), adults: String(adults), children: String(children), priceStar,
+                    tags, scenicSpots: selectedSpots.join(","), sort: sort || "", nights: String(nights),
                   },
                 })
               }
@@ -364,6 +268,55 @@ export default function ListScreen() {
         ListFooterComponent={<View className="items-center py-6"><Text className="text-xs text-neutral-400">{loadingMore ? "加载更多中..." : hasMore ? "上滑加载更多" : "没有更多酒店了"}</Text></View>}
       />
 
+
+      {/* ============ 核心弹窗逻辑区 ============ */}
+      <SearchSummarySheet
+        visible={isSummarySheetOpen}
+        city={city}
+        location={location} 
+        checkInDate={checkInDate}
+        checkOutDate={checkOutDate}
+        nights={nights}
+        rooms={rooms}
+        adults={adults}
+        childCount={children}
+        onClose={() => setIsSummarySheetOpen(false)}
+        onConfirm={() => setIsSummarySheetOpen(false)}
+
+
+        onCityPress={() => {
+          setIsSummarySheetOpen(false);
+          router.replace({ pathname: "/location", params: { city, from: "list" } });
+        }}
+
+        onDatePress={() => setIsCalendarOpen(true)}
+        onGuestPress={() => setIsGuestOpen(true)}
+      />
+
+      <DateRangePickerSheet
+        visible={isCalendarOpen}
+        checkInDate={checkInDate}
+        checkOutDate={checkOutDate}
+        onClose={() => setIsCalendarOpen(false)} 
+        onConfirm={({ checkInDate: nextIn, checkOutDate: nextOut }) => {
+          setCheckInDate(nextIn);
+          setCheckOutDate(nextOut);
+          setIsCalendarOpen(false); 
+        }}
+      />
+
+      <GuestPickerSheet
+        visible={isGuestOpen}
+        initial={{ rooms, adults, children } satisfies GuestDraft}
+        onClose={() => setIsGuestOpen(false)} 
+        onConfirm={(next) => {
+          setRooms(next.rooms);
+          setAdults(Math.max(next.adults, next.rooms));
+          setChildren(next.children);
+          setIsGuestOpen(false); 
+        }}
+      />
+
       <DateRangePickerSheet
         visible={isCalendarOpen}
         checkInDate={checkInDate}
@@ -372,6 +325,7 @@ export default function ListScreen() {
         onConfirm={({ checkInDate: nextIn, checkOutDate: nextOut }) => {
           setCheckInDate(nextIn);
           setCheckOutDate(nextOut);
+          setIsCalendarOpen(false);
         }}
       />
 

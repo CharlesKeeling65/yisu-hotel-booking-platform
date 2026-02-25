@@ -1,4 +1,8 @@
-const API_BASE_URL = "http://localhost:3000";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const API_BASE_URL =
+  String(process.env.EXPO_PUBLIC_API_BASE_URL || "").trim() ||
+  (typeof window !== "undefined" ? "" : "http://localhost:3000");
 
 type ApiResponse<T> = {
   code: number;
@@ -12,7 +16,17 @@ type ApiResponse<T> = {
 
 export type ReverseGeocodePayload = {
   provider: string;
-  reverse: Array<{
+  normalized?: {
+    provider?: string;
+    province?: string;
+    city?: string;
+    district?: string;
+    cityOrCounty?: string;
+    street?: string;
+    displayText?: string;
+    hasResult?: boolean;
+  };
+  reverse: {
     region?: string;
     city?: string;
     district?: string;
@@ -20,7 +34,14 @@ export type ReverseGeocodePayload = {
     name?: string;
     subregion?: string;
     streetNumber?: string;
-  }>;
+  }[];
+};
+
+export type LocationSuggestion = {
+  type: "city" | "area" | "scenic" | "hotel" | string;
+  city: string;
+  county?: string;
+  label: string;
 };
 
 export type ListParams = {
@@ -41,12 +62,21 @@ async function getJson<T>(
   path: string,
   options?: RequestInit,
 ): Promise<ApiResponse<T>> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options?.headers as Record<string, string> | undefined),
+  };
+
+  try {
+    const token = await AsyncStorage.getItem("customer_token");
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  } catch (_e) {
+    // ignore storage errors
+  }
+
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers ?? {}),
-    },
+    headers,
   });
   const data = (await res.json().catch(() => null)) as ApiResponse<T> | null;
   if (!res.ok) {
@@ -153,6 +183,21 @@ export async function fetchReverseGeocode(lat: number, lon: number) {
   return res.data ?? { provider: "none", reverse: [] };
 }
 
+export async function fetchLocationSuggestions(params: {
+  q: string;
+  city?: string;
+  limit?: number;
+}) {
+  const search = new URLSearchParams();
+  search.set("q", params.q);
+  if (params.city) search.set("city", params.city);
+  if (params.limit) search.set("limit", String(params.limit));
+  const res = await getJson<LocationSuggestion[]>(
+    `/api/location/suggest?${search.toString()}`,
+  );
+  return res.data ?? [];
+}
+
 export type MobileOrder = {
   id: string;
   customerId: string;
@@ -221,13 +266,13 @@ export async function payMobileOrder(orderId: string, customerId: string) {
 }
 
 export async function fetchMobileOrders(params: {
-  customerId: string;
+  customerId?: string; // optional, server uses token
   status?: string;
   page?: number;
   pageSize?: number;
 }) {
   const search = new URLSearchParams();
-  search.set("customerId", params.customerId);
+  // Do not send customerId from client; server will resolve from Authorization token.
   if (params.status) search.set("status", params.status);
   if (params.page) search.set("page", String(params.page));
   if (params.pageSize) search.set("pageSize", String(params.pageSize));
@@ -242,4 +287,18 @@ export async function fetchMobileOrders(params: {
     total: res.total ?? 0,
     hasMore: Boolean(res.hasMore),
   };
+}
+
+export async function fetchOrderBreakdown(orderId: string) {
+  const res = await getJson<{ items: any[]; discounts: any[]; total: number }>(
+    `/api/mobile/orders/${orderId}/breakdown`,
+  );
+  return res.data ?? { items: [], discounts: [], total: 0 };
+}
+
+export async function cancelMobileOrder(orderId: string) {
+  const res = await getJson<any>(`/api/mobile/orders/${orderId}/cancel`, {
+    method: "PUT",
+  });
+  return res.data ?? null;
 }

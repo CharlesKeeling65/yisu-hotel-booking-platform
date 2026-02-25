@@ -50,11 +50,20 @@ function normalizeRegionName(value) {
     .toLowerCase();
 }
 
+function stripRegionSuffix(value) {
+  return String(value || "")
+    .trim()
+    .replace(/(省|市|县)$/g, "");
+}
+
 const GEO_TIMEOUT_MS = Math.max(
   1200,
   Number(process.env.GEO_TIMEOUT_MS || 4500),
 );
 const AMAP_WEB_KEY = String(process.env.AMAP_WEB_KEY || "");
+const GEO_PROVIDER_MODE = String(process.env.GEO_PROVIDER_MODE || "auto")
+  .trim()
+  .toLowerCase();
 
 async function fetchJsonWithTimeout(
   url,
@@ -146,11 +155,60 @@ async function reverseByAmap(lat, lon) {
 }
 
 async function reverseGeocodeByStrategy(lat, lon) {
+  if (GEO_PROVIDER_MODE === "amap_only") {
+    return (await reverseByAmap(lat, lon)) || { provider: "none", reverse: [] };
+  }
+
+  if (GEO_PROVIDER_MODE === "amap") {
+    return (
+      (await reverseByAmap(lat, lon)) ||
+      (await reverseByNominatim(lat, lon)) ||
+      (await reverseByBigDataCloud(lat, lon)) || {
+        provider: "none",
+        reverse: [],
+      }
+    );
+  }
+
   return (
     (await reverseByNominatim(lat, lon)) ||
     (await reverseByBigDataCloud(lat, lon)) ||
     (await reverseByAmap(lat, lon)) || { provider: "none", reverse: [] }
   );
+}
+
+function normalizeReverseGeocodePayload(payload) {
+  const first = payload?.reverse?.[0] || {};
+  const province = String(first.region || "").trim();
+  const city = String(first.city || first.subregion || "").trim();
+  const district = String(first.district || "").trim();
+  const districtAsCity = /(县|市)$/.test(district);
+  const cityOrCountyRaw = districtAsCity
+    ? district
+    : city || district || province;
+  const cityOrCounty = stripRegionSuffix(cityOrCountyRaw);
+  const rawStreet = String(first.street || "").trim();
+  const streetNorm = stripRegionSuffix(rawStreet);
+  const cityNorm = stripRegionSuffix(city);
+  const districtNorm = stripRegionSuffix(district);
+  const street =
+    !rawStreet ||
+    streetNorm === cityOrCounty ||
+    streetNorm === cityNorm ||
+    streetNorm === districtNorm
+      ? ""
+      : rawStreet;
+
+  return {
+    provider: String(payload?.provider || "none"),
+    province,
+    city,
+    district,
+    cityOrCounty,
+    street,
+    displayText: [cityOrCounty, street].filter(Boolean).join(" "),
+    hasResult: Boolean(payload?.reverse?.length),
+  };
 }
 
 function toDateTime(value) {
@@ -358,9 +416,9 @@ async function initDbPool() {
     charset: "utf8mb4",
   });
 
-  const schemaPath = path.join(__dirname, "sql", "init_schema.sql");
-  if (fs.existsSync(schemaPath)) {
-    const sql = fs.readFileSync(schemaPath, "utf8");
+  async function runSqlFileStatements(filePath, ignoreComment = "") {
+    if (!fs.existsSync(filePath)) return;
+    const sql = fs.readFileSync(filePath, "utf8");
     const stmts = sql
       .split(/;\s*\n/)
       .map((s) => s.trim())
@@ -369,10 +427,16 @@ async function initDbPool() {
       try {
         await pool.query(s);
       } catch {
-        // ignore single statement errors for compatibility
+        // ignore single statement errors for compatibility / repeatable init
+        if (ignoreComment) {
+          // keep branch for readability and future debugging hooks
+        }
       }
     }
   }
+
+  const schemaPath = path.join(__dirname, "sql", "init_schema.sql");
+  await runSqlFileStatements(schemaPath, "schema init");
 
   // Ensure orders table exists for mobile booking flow
   const ordersSchemaPath = path.join(
@@ -380,26 +444,22 @@ async function initDbPool() {
     "sql",
     "create_orders_table.sql",
   );
-  if (fs.existsSync(ordersSchemaPath)) {
-    const sql = fs.readFileSync(ordersSchemaPath, "utf8");
-    const stmts = sql
-      .split(/;\s*\n/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    for (const s of stmts) {
-      try {
-        await pool.query(s);
-      } catch {
-        // ignore errors when indexes or tables already exist
-      }
-    }
-  }
+  await runSqlFileStatements(ordersSchemaPath, "orders schema init");
 
   // Best-effort lightweight migration for orders table to ensure new columns exist
   try {
     // 添加 customer_id 兼容字段（如果已存在会抛错，忽略即可）
     await pool.query(
       "ALTER TABLE `orders` ADD COLUMN `customer_id` VARCHAR(64) NULL COMMENT '下单客户ID，对应 Customer.id' AFTER `id`",
+    );
+  } catch (_e) {
+    // ignore when column already exists or table missing
+  }
+
+  // Best-effort: add token column to Customer table for session tokens
+  try {
+    await pool.query(
+      "ALTER TABLE `Customer` ADD COLUMN `token` VARCHAR(128) NULL COMMENT '登录会话 token' AFTER `password`",
     );
   } catch (_e) {
     // ignore when column already exists or table missing
@@ -414,20 +474,30 @@ async function initDbPool() {
     // ignore if table missing or already converted
   }
 
-  // Recreate Customer table (drop existing then create fresh)
+  // Ensure Customer table exists (non-destructive).
+  // SQL file note: create_customers_table.sql 包含建表与手机号索引语句；
+  // 这里不再 DROP，避免 dev:api 重启时清空移动端注册用户。
   try {
-    await pool.query("DROP TABLE IF EXISTS \`Customer\`");
-    await pool.query(`
-      CREATE TABLE \`Customer\` (
-        \`id\` VARCHAR(80) NOT NULL PRIMARY KEY,
-        \`password\` VARCHAR(255) NOT NULL,
-        \`phone\` VARCHAR(32) DEFAULT NULL,
-        \`name\` VARCHAR(128) DEFAULT NULL,
-        \`email\` VARCHAR(128) DEFAULT NULL,
-        \`createdAt\` DATETIME DEFAULT CURRENT_TIMESTAMP,
-        \`updatedAt\` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-    `);
+    const customerSchemaPath = path.join(
+      __dirname,
+      "sql",
+      "create_customers_table.sql",
+    );
+    if (fs.existsSync(customerSchemaPath)) {
+      await runSqlFileStatements(customerSchemaPath, "customer schema init");
+    } else {
+      await pool.query(`
+        CREATE TABLE \`Customer\` (
+          \`id\` VARCHAR(80) NOT NULL PRIMARY KEY,
+          \`password\` VARCHAR(255) NOT NULL,
+          \`phone\` VARCHAR(32) DEFAULT NULL,
+          \`name\` VARCHAR(128) DEFAULT NULL,
+          \`email\` VARCHAR(128) DEFAULT NULL,
+          \`createdAt\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+          \`updatedAt\` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+      `);
+    }
   } catch (e) {
     // ignore
   }
@@ -465,21 +535,29 @@ async function initDbPool() {
   const hotelCount = Number(hotelCountRows?.[0]?.c || 0);
   if (hotelCount < 20) {
     const seedPath = path.join(__dirname, "sql", "seed_sample.sql");
-    if (fs.existsSync(seedPath)) {
-      const seedSql = fs.readFileSync(seedPath, "utf8");
-      const seedStmts = seedSql
-        .split(/;\s*\n/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      for (const s of seedStmts) {
-        try {
-          await pool.query(s);
-        } catch {
-          // ignore single seed statement errors
-        }
-      }
-    }
+    await runSqlFileStatements(seedPath, "seed sample");
+
+    // add_20_hotels_data.sql 注释说明为“新增20条酒店测试数据”，按初始化种子流程放在 seed_sample 之后。
+    // 使用同一条件块：首次初始化 Hotel_Base 通常为 0，会先灌基础样例，再尝试追加 20 条扩展样例。
+    const add20HotelsSeedPath = path.join(
+      __dirname,
+      "sql",
+      "add_20_hotels_data.sql",
+    );
+    await runSqlFileStatements(
+      add20HotelsSeedPath,
+      "seed additional 20 hotels",
+    );
   }
+
+  // migrate_add_room_fields.sql 注释说明为“向 Room 表添加缺失字段（安全执行，可重复运行）”。
+  // 按要求放在 seed_sample 之后执行；即使多次启动也应保持幂等。
+  const roomMigratePath = path.join(
+    __dirname,
+    "sql",
+    "migrate_add_room_fields.sql",
+  );
+  await runSqlFileStatements(roomMigratePath, "room field migration");
 }
 
 async function getHotelRelations(hotelIds) {
@@ -577,6 +655,19 @@ function derivePriceRange(rooms) {
 }
 
 function toLegacyRoom(row = {}, image) {
+  const remainVal = row.remain != null ? Number(row.remain) : null;
+  // 状态优先由 remain 判断：有剩余(>0)为可订，否则为售罄；
+  // 若 remain 缺失则退回到数据库的 status 字段作为回退（但不再虚构一个默认可订的 remain=10）
+  const status =
+    remainVal != null
+      ? remainVal > 0
+        ? "available"
+        : "soldout"
+      : row.status === 0
+        ? "available"
+        : "soldout";
+  const remain = remainVal != null ? remainVal : 0;
+
   return {
     id: row.id,
     hotel_id: row.hotel_id,
@@ -586,8 +677,8 @@ function toLegacyRoom(row = {}, image) {
     ),
     current: Number(row.price || 0),
     discount: row.discount || "",
-    remain: Number(row.remain != null ? row.remain : row.status === 0 ? 10 : 0),
-    status: row.status === 0 ? "available" : "soldout",
+    remain,
+    status,
     remark: row.remark || "",
     image: image || "",
     occupancy: Number(row.occupancy || 2),
@@ -756,9 +847,10 @@ app.post("/api/customer/login", async (req, res) => {
       .status(400)
       .json({ code: 400, msg: "手机号/邮箱 与 password 必填" });
   try {
+    // 支持通过手机号、邮箱、id 或 名称（用户名）登录
     const [rows] = await pool.query(
-      "SELECT id, password, phone, name, email, createdAt FROM `Customer` WHERE phone = ? OR email = ? LIMIT 1",
-      [idv, idv],
+      "SELECT id, password, phone, name, email, createdAt FROM `Customer` WHERE phone = ? OR email = ? OR id = ? OR name = ? LIMIT 1",
+      [idv, idv, idv, idv],
     );
     const customer = rows[0];
     if (!customer)
@@ -766,10 +858,24 @@ app.post("/api/customer/login", async (req, res) => {
     const cipher = sha256(String(password || ""));
     if (!verifyPassword(cipher, customer.password))
       return res.status(401).json({ code: 401, msg: "用户名或密码错误" });
+
+    // 生成 token 并保存到 Customer 表（轻量 session 方案）
+    const token = `cust-${customer.id}-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+    try {
+      await pool.query("UPDATE `Customer` SET token = ? WHERE id = ?", [
+        token,
+        customer.id,
+      ]);
+    } catch (_e) {
+      // ignore storage error, 仍然返回 token 给客户端
+    }
+
     return res.json({
       code: 200,
       data: {
-        token: `cust-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        token,
         customer: {
           id: customer.id,
           phone: customer.phone,
@@ -797,9 +903,129 @@ app.get("/api/geocode/reverse", async (req, res) => {
   }
   try {
     const data = await reverseGeocodeByStrategy(lat, lon);
-    return res.json({ code: 200, data });
+    return res.json({
+      code: 200,
+      data: {
+        ...data,
+        normalized: normalizeReverseGeocodePayload(data),
+      },
+    });
   } catch (_e) {
-    return res.json({ code: 200, data: { provider: "none", reverse: [] } });
+    const fallback = { provider: "none", reverse: [] };
+    return res.json({
+      code: 200,
+      data: {
+        ...fallback,
+        normalized: normalizeReverseGeocodePayload(fallback),
+      },
+    });
+  }
+});
+
+app.get("/api/location/suggest", async (req, res) => {
+  const q = String(req.query.q || "").trim();
+  const preferredCity = stripRegionSuffix(String(req.query.city || "").trim());
+  const limit = Math.min(
+    20,
+    Math.max(1, parseIntSafe(req.query.limit || 12, 12)),
+  );
+  if (!q) return res.json({ code: 200, data: [] });
+
+  const kw = `%${q}%`;
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT b.id, b.name_cn, b.name_en, b.city, b.county, b.address, b.scenic_spots
+       FROM \`Hotel_Base\` b
+       JOIN \`Hotel_Audit\` a ON a.hotel_id = b.id
+       WHERE a.audit_status = 1
+         AND a.online_status = 1
+         AND (
+           b.name_cn LIKE ?
+           OR b.name_en LIKE ?
+           OR b.city LIKE ?
+           OR b.county LIKE ?
+           OR b.address LIKE ?
+           OR b.scenic_spots LIKE ?
+         )
+       ORDER BY b.featured_weight DESC, b.created_time DESC
+       LIMIT 60`,
+      [kw, kw, kw, kw, kw, kw],
+    );
+
+    const seen = new Set();
+    const items = [];
+    const qNorm = q.toLowerCase();
+
+    function pushItem(item) {
+      const city = stripRegionSuffix(item.city || "");
+      const label = String(item.label || "").trim();
+      if (!label) return;
+      const key = `${item.type}|${city}|${label}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      let score = Number(item.score || 0);
+      const labelLower = label.toLowerCase();
+      if (label === q) score += 90;
+      else if (label.startsWith(q)) score += 55;
+      else if (labelLower.includes(qNorm)) score += 25;
+      if (preferredCity && city === preferredCity) score += 18;
+
+      items.push({
+        type: item.type,
+        city,
+        county: stripRegionSuffix(item.county || ""),
+        label,
+        score,
+      });
+    }
+
+    for (const row of rows) {
+      const city = String(row.city || "");
+      const county = String(row.county || "");
+      const nameCn = String(row.name_cn || "").trim();
+      const nameEn = String(row.name_en || "").trim();
+      const scenicSpots = normalizeTextList(row.scenic_spots);
+
+      if (stripRegionSuffix(city).includes(stripRegionSuffix(q))) {
+        pushItem({
+          type: "city",
+          city,
+          county,
+          label: stripRegionSuffix(city),
+          score: 60,
+        });
+      }
+      if (stripRegionSuffix(county).includes(stripRegionSuffix(q))) {
+        pushItem({
+          type: "area",
+          city,
+          county,
+          label: stripRegionSuffix(county),
+          score: 58,
+        });
+      }
+      if (nameCn && nameCn.toLowerCase().includes(qNorm)) {
+        pushItem({ type: "hotel", city, county, label: nameCn, score: 50 });
+      }
+      if (nameEn && nameEn.toLowerCase().includes(qNorm)) {
+        pushItem({ type: "hotel", city, county, label: nameEn, score: 38 });
+      }
+      for (const spot of scenicSpots) {
+        if (String(spot).toLowerCase().includes(qNorm)) {
+          pushItem({ type: "scenic", city, county, label: spot, score: 52 });
+        }
+      }
+    }
+
+    items.sort((a, b) => b.score - a.score || a.label.length - b.label.length);
+    return res.json({
+      code: 200,
+      data: items.slice(0, limit).map(({ score, ...item }) => item),
+    });
+  } catch (e) {
+    return res.status(500).json({ code: 500, msg: e.message });
   }
 });
 
@@ -1396,6 +1622,11 @@ app.get("/api/hotels/:id/rooms", async (req, res) => {
 app.post("/api/hotels/:id/rooms", async (req, res) => {
   const { id: hotelId } = req.params;
   const p = req.body || {};
+  console.log(
+    "[debug] POST /api/hotels/%s/rooms payload:",
+    hotelId,
+    JSON.stringify(p).slice(0, 200),
+  );
   const roomId = genId("room");
   try {
     await pool.query(
@@ -1436,6 +1667,12 @@ app.post("/api/hotels/:id/rooms", async (req, res) => {
 async function handleBulkRoomSave(req, res) {
   const { id: hotelId } = req.params;
   const rooms = Array.isArray(req.body?.rooms) ? req.body.rooms : [];
+  console.log("[debug] bulk-save rooms count:", rooms.length);
+  if (rooms.length)
+    console.log(
+      "[debug] first item sample:",
+      JSON.stringify(rooms[0]).slice(0, 200),
+    );
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -1485,12 +1722,15 @@ async function handleBulkRoomSave(req, res) {
         );
       }
     }
-
     await conn.commit();
 
     const [savedRows] = await pool.query(
       "SELECT * FROM `Room` WHERE hotel_id = ? ORDER BY price ASC",
       [hotelId],
+    );
+    console.log(
+      "[debug] bulk-save committed, fetched savedRows count:",
+      savedRows.length,
     );
     const roomIds = savedRows.map((x) => x.id);
     let images = [];
@@ -1871,8 +2111,19 @@ app.get("/api/mobile/hotels", async (req, res) => {
           capacity: Number(x.occupancy || 2),
           bedType: inferBedType(x.name),
           size: x.size ? Number(x.size) : null,
-          status: Number(x.status || 0) === 0 ? "available" : "soldout",
+          // 不再默认把缺失的 remain 当作可订库存 (如之前用 status===0 -> 10)，
+          // 优先根据数据库字段 remain 判断可售状态，缺失时退回到 status 字段。
+          remain: Number(x.remain != null ? x.remain : 0),
+          status:
+            x.remain != null
+              ? Number(x.remain) > 0
+                ? "available"
+                : "soldout"
+              : Number(x.status || 0) === 0
+                ? "available"
+                : "soldout",
           breakfastIncluded: Number(x.breakfast_included || 0) === 1,
+          raw: x,
           image:
             rel.roomImageByRoom[x.id] ||
             `https://picsum.photos/seed/room_${x.id}/800/500`,
@@ -1915,8 +2166,10 @@ app.get("/api/mobile/hotels/:id", async (req, res) => {
         capacity: Number(x.occupancy || 2),
         bedType: inferBedType(x.name),
         size: x.size ? Number(x.size) : null,
+        remain: Number(x.remain != null ? x.remain : x.status === 0 ? 10 : 0),
         status: Number(x.status || 0) === 0 ? "available" : "soldout",
         breakfastIncluded: Number(x.breakfast_included || 0) === 1,
+        raw: x,
         image:
           rel.roomImageByRoom[x.id] ||
           `https://picsum.photos/seed/room_${x.id}/800/500`,
@@ -1973,7 +2226,15 @@ function mapMobileOrderRow(row) {
     hotelId: row.hotel_id,
     roomId: row.room_id,
     status: row.status,
-    statusLabel: statusTextMap[row.status] || row.status || "",
+    // 统一前端主要展示的状态为：未支付 / 已支付 / 已取消
+    // 优先依据 payment_status 决定未支付/已支付；若订单状态为 cancelled 则显示已取消
+    statusLabel:
+      (row.payment_status === "unpaid" && "未支付") ||
+      (row.status === "cancelled" && "已取消") ||
+      (row.payment_status === "paid" && "已支付") ||
+      statusTextMap[row.status] ||
+      row.status ||
+      "",
     paymentStatus: row.payment_status,
     paymentStatusLabel:
       payStatusTextMap[row.payment_status] || row.payment_status || "",
@@ -2000,11 +2261,35 @@ function mapMobileOrderRow(row) {
   };
 }
 
+// 从请求头或自定义 header 中解析 token 并查出对应 customer id
+async function getCustomerIdFromReq(req) {
+  const authHeader =
+    req.headers?.authorization ||
+    req.headers?.["x-customer-token"] ||
+    req.headers?.["x-token"] ||
+    "";
+  const token = String(authHeader || "")
+    .replace(/^Bearer\s*/i, "")
+    .trim();
+  if (!token) return null;
+  try {
+    const [rows] = await pool.query(
+      "SELECT id FROM `Customer` WHERE token = ? LIMIT 1",
+      [token],
+    );
+    return rows && rows[0] && rows[0].id ? rows[0].id : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
 app.post("/api/mobile/orders", async (req, res) => {
   const p = req.body || {};
-  const customerId = String(p.customerId || "").trim();
-  if (!customerId)
+  // 强制使用已登录用户的 customer_id（从 token 中解析），不能由客户端任意指定
+  const tokenCustomerId = await getCustomerIdFromReq(req);
+  if (!tokenCustomerId)
     return res.status(401).json({ code: 401, msg: "请先登录后再下单" });
+  const customerId = tokenCustomerId;
 
   if (
     !hasRequiredFields(p, [
@@ -2072,15 +2357,61 @@ app.post("/api/mobile/orders", async (req, res) => {
       updated_at: now,
     };
 
-    await pool.query("INSERT INTO `orders` SET ?", [insertRow]);
+    // 使用事务：先检查并更新房型剩余数量，再插入订单，保证并发安全
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
 
-    const [rows] = await pool.query(
-      "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id WHERE o.id = ? LIMIT 1",
-      [id],
-    );
+      // 查询房型剩余数量并加锁（基于事务）
+      const [roomRows] = await conn.query(
+        "SELECT remain FROM `Room` WHERE id = ? LIMIT 1",
+        [String(p.roomId)],
+      );
+      const roomRow = roomRows[0] || {};
+      const remainVal = roomRow.remain;
 
-    const orderRow = rows[0];
-    return res.json({ code: 200, data: mapMobileOrderRow(orderRow) });
+      // 如果数据库中存在明确的剩余数量（number），则需校验是否足够
+      if (typeof remainVal === "number") {
+        if (remainVal < roomsCount) {
+          await conn.rollback();
+          conn.release();
+          return res
+            .status(400)
+            .json({ code: 400, msg: "房间数量不足，无法下单" });
+        }
+
+        // 扣减剩余房间数
+        const [upd] = await conn.query(
+          "UPDATE `Room` SET remain = remain - ? WHERE id = ? AND remain >= ?",
+          [roomsCount, String(p.roomId), roomsCount],
+        );
+        if (!upd || !upd.affectedRows) {
+          await conn.rollback();
+          conn.release();
+          return res
+            .status(409)
+            .json({ code: 409, msg: "房间数量变动，当前库存不足，请重试" });
+        }
+      }
+
+      // 插入订单
+      await conn.query("INSERT INTO `orders` SET ?", [insertRow]);
+
+      const [rows] = await conn.query(
+        "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id WHERE o.id = ? LIMIT 1",
+        [id],
+      );
+
+      const orderRow = rows[0];
+
+      await conn.commit();
+      conn.release();
+      return res.json({ code: 200, data: mapMobileOrderRow(orderRow) });
+    } catch (err) {
+      await conn.rollback();
+      conn.release();
+      throw err;
+    }
   } catch (e) {
     return res.status(500).json({ code: 500, msg: e.message });
   }
@@ -2089,7 +2420,6 @@ app.post("/api/mobile/orders", async (req, res) => {
 // 移动端：订单支付成功，更新支付状态为已支付
 app.post("/api/mobile/orders/:id/pay", async (req, res) => {
   const id = String(req.params.id || "").trim();
-  const customerId = String(req.body?.customerId || "").trim();
   if (!id) {
     return res.status(400).json({ code: 400, msg: "缺少必要参数：订单 id" });
   }
@@ -2097,13 +2427,17 @@ app.post("/api/mobile/orders/:id/pay", async (req, res) => {
   const now = formatDateForMySQL();
 
   try {
+    // 验证 token 并使用 token 对应的 customer_id，防止越权
+    const tokenCustomerId = await getCustomerIdFromReq(req);
+    if (!tokenCustomerId) {
+      return res.status(401).json({ code: 401, msg: "请先登录" });
+    }
+
     let sql =
       "UPDATE `orders` SET status = ?, payment_status = ?, updated_at = ? WHERE id = ?";
     const params = ["upcoming", "paid", now, id];
-    if (customerId) {
-      sql += " AND customer_id = ?";
-      params.push(customerId);
-    }
+    sql += " AND customer_id = ?";
+    params.push(tokenCustomerId);
 
     const [result] = await pool.query(sql, params);
 
@@ -2124,14 +2458,175 @@ app.post("/api/mobile/orders/:id/pay", async (req, res) => {
   }
 });
 
+// 移动端：取消订单
+app.put("/api/mobile/orders/:id/cancel", async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  if (!id) {
+    return res.status(400).json({ code: 400, msg: "缺少必要参数：订单 id" });
+  }
+  try {
+    const tokenCustomerId = await getCustomerIdFromReq(req);
+    if (!tokenCustomerId) {
+      return res.status(401).json({ code: 401, msg: "请先登录" });
+    }
+
+    // 使用事务：先读取订单并回滚房型 remain，再更新订单状态，保证并发安全
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // 锁定订单行
+      const [orderRows] = await conn.query(
+        "SELECT * FROM `orders` WHERE id = ? LIMIT 1 FOR UPDATE",
+        [id],
+      );
+      const orderRow = orderRows[0];
+      if (!orderRow) {
+        await conn.rollback();
+        conn.release();
+        return res.status(404).json({ code: 404, msg: "订单不存在" });
+      }
+      if (String(orderRow.customer_id) !== String(tokenCustomerId)) {
+        await conn.rollback();
+        conn.release();
+        return res.status(403).json({ code: 403, msg: "无权限取消该订单" });
+      }
+      if (orderRow.status === "cancelled") {
+        await conn.rollback();
+        conn.release();
+        return res.status(400).json({ code: 400, msg: "订单已取消" });
+      }
+
+      // 回滚房型库存：将 orders.rooms_count 加回到 Room.remain
+      const roomsCount = Number(orderRow.rooms_count || 0);
+      const roomId = String(orderRow.room_id);
+      if (roomsCount > 0 && roomId) {
+        await conn.query(
+          "UPDATE `Room` SET remain = COALESCE(remain,0) + ? WHERE id = ?",
+          [roomsCount, roomId],
+        );
+      }
+
+      // 更新订单状态为 cancelled
+      const now = formatDateForMySQL();
+      const [upd] = await conn.query(
+        "UPDATE `orders` SET status = ?, updated_at = ? WHERE id = ? AND customer_id = ?",
+        ["cancelled", now, id, tokenCustomerId],
+      );
+      if (!upd || !upd.affectedRows) {
+        await conn.rollback();
+        conn.release();
+        return res.status(500).json({ code: 500, msg: "取消订单失败" });
+      }
+
+      // 返回更新后的订单信息
+      const [rows] = await conn.query(
+        "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id WHERE o.id = ? LIMIT 1",
+        [id],
+      );
+      const updatedOrder = rows[0];
+
+      await conn.commit();
+      conn.release();
+      return res.json({ code: 200, data: mapMobileOrderRow(updatedOrder) });
+    } catch (err) {
+      await conn.rollback();
+      conn.release();
+      throw err;
+    }
+  } catch (e) {
+    return res.status(500).json({ code: 500, msg: e.message });
+  }
+});
+
+// 获取订单费用明细（按房价、晚数、优惠项汇总）
+app.get("/api/mobile/orders/:id/breakdown", async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  if (!id) return res.status(400).json({ code: 400, msg: "缺少订单 id" });
+  try {
+    const tokenCustomerId = await getCustomerIdFromReq(req);
+    if (!tokenCustomerId)
+      return res.status(401).json({ code: 401, msg: "请先登录" });
+
+    const [rows] = await pool.query(
+      "SELECT o.*, r.price AS room_price, r.original_price AS room_original_price FROM `orders` o LEFT JOIN `Room` r ON o.room_id = r.id WHERE o.id = ? LIMIT 1",
+      [id],
+    );
+    const order = rows[0];
+    if (!order) return res.status(404).json({ code: 404, msg: "订单不存在" });
+    if (String(order.customer_id) !== String(tokenCustomerId))
+      return res.status(403).json({ code: 403, msg: "无权限查看该订单" });
+
+    const checkIn = toDateOnly(order.check_in) || null;
+    const checkOut = toDateOnly(order.check_out) || null;
+    const nights = Number(order.nights || 1);
+    const unit = Number(
+      order.room_price || order.price_subtotal / Math.max(1, nights) || 0,
+    );
+    const originalUnit = Number(order.room_original_price || 0);
+
+    // 聚合为一行房费（显示房价总额），并从数据库读取折扣（如 coupon_amount）
+    const roomsCount = Number(order.rooms_count || 1);
+    const nightsCount = Number(order.nights || nights || 1);
+    const subtotal = Number(order.price_subtotal || 0);
+    const unitPriceComputed = Number(order.room_price || 0);
+
+    const items = [];
+    // 房费：显示为 "房费 × {rooms}间 × {nights}晚"，金额来自 price_subtotal
+    items.push({
+      label: `房费 × ${roomsCount}间 × ${nightsCount}晚`,
+      unitPrice: unitPriceComputed,
+      amount: subtotal,
+    });
+
+    const discounts = [];
+    // 将数据库中的 coupon_amount 映射为限时优惠（若有）
+    if (order.coupon_amount && Number(order.coupon_amount) !== 0) {
+      discounts.push({
+        label: "限时优惠",
+        amount: -Number(order.coupon_amount),
+      });
+    }
+
+    const total = Number(order.payable_amount || 0);
+    // 折扣合计（discounts 中的金额通常为负数）
+    const discountsSum = (discounts || []).reduce(
+      (s, d) => s + Number(d.amount || 0),
+      0,
+    );
+    // 要求：第一行价格等于 总计 + 限时优惠（注意 discounts 中为负值），
+    // 等价于：items[0].amount = total - discountsSum
+    if (items.length > 0) {
+      items[0].amount = Number(total - discountsSum || 0);
+      // 若 unitPrice 未提供且有 nights/rooms，则尝试计算每间每晚单价
+      try {
+        const denom = Math.max(1, roomsCount * nightsCount);
+        items[0].unitPrice = Number(
+          items[0].amount / denom || items[0].unitPrice || 0,
+        );
+      } catch (_e) {}
+    }
+
+    return res.json({
+      code: 200,
+      data: {
+        items,
+        discounts,
+        total,
+        currency: order.currency || "CNY",
+      },
+    });
+  } catch (e) {
+    return res.status(500).json({ code: 500, msg: e.message });
+  }
+});
+
 app.get("/api/mobile/orders", async (req, res) => {
-  const customerId = String(
-    req.query.customerId || req.query.customer_id || "",
-  ).trim();
-  if (!customerId)
-    return res
-      .status(401)
-      .json({ code: 401, msg: "缺少 customerId，请先登录" });
+  // 强制从 token 中解析 customer_id，拒绝客户端传入任意 customerId
+  const tokenCustomerId = await getCustomerIdFromReq(req);
+  if (!tokenCustomerId)
+    return res.status(401).json({ code: 401, msg: "请先登录" });
+  const customerId = tokenCustomerId;
 
   const page = parseIntSafe(req.query.page || 1, 1) || 1;
   const pageSize = parseIntSafe(req.query.pageSize || 10, 10) || 10;
@@ -2140,32 +2635,61 @@ app.get("/api/mobile/orders", async (req, res) => {
   const where = ["o.customer_id = ?"];
   const params = [customerId];
   if (status && status !== "all") {
-    where.push("o.status = ?");
-    params.push(status);
+    // 支持按 payment_status 过滤（unpaid/paid/refunded）或按订单状态过滤（cancelled 等）
+    if (status === "unpaid" || status === "paid" || status === "refunded") {
+      where.push("o.payment_status = ?");
+      params.push(status);
+    } else if (status === "cancelled") {
+      where.push("o.status = ?");
+      params.push("cancelled");
+    } else {
+      // 兼容旧的 status 值（pending/upcoming/completed 等）
+      where.push("o.status = ?");
+      params.push(status);
+    }
   }
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const offset = (page - 1) * pageSize;
-
   try {
+    const listParams = params.slice();
+    // 查询列表
     const [rows] = await pool.query(
-      `SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name
-       FROM \`orders\` o
-       LEFT JOIN \`Hotel_Base\` h ON o.hotel_id = h.id
-       LEFT JOIN \`Room\` r ON o.room_id = r.id
-       ${whereSql}
-       ORDER BY o.created_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset],
+      "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id " +
+        whereSql +
+        " ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
+      listParams.concat([pageSize, offset]),
     );
+    if (process.env.NODE_ENV !== "production") {
+      try {
+        console.log(
+          "[orders:list] where=",
+          whereSql,
+          "params=",
+          listParams,
+          "limit=",
+          pageSize,
+          "offset=",
+          offset,
+        );
+      } catch (_e) {}
+    }
 
+    // 查询总数
     const [countRows] = await pool.query(
-      `SELECT COUNT(*) AS c FROM \`orders\` o ${whereSql}`,
+      "SELECT COUNT(*) AS total FROM `orders` o " + whereSql,
       params,
     );
-    const total = Number(countRows?.[0]?.c || 0);
-    const data = rows.map((r) => mapMobileOrderRow(r));
-    const hasMore = offset + rows.length < total;
-    return res.json({ code: 200, data, page, pageSize, total, hasMore });
+    const total = (countRows && countRows[0] && countRows[0].total) || 0;
+
+    const mapped = (rows || []).map((r) => mapMobileOrderRow(r));
+    return res.json({
+      code: 200,
+      data: mapped,
+      page,
+      pageSize,
+      total,
+      hasMore: offset + (mapped.length || 0) < total,
+    });
   } catch (e) {
     return res.status(500).json({ code: 500, msg: e.message });
   }

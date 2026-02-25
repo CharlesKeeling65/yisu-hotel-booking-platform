@@ -16,7 +16,7 @@ export default function LoginModal({ visible, onClose, onSuccess }: Props) {
 
   const handleLogin = async () => {
     if (!identifier.trim() || !password) {
-      Alert.alert("请输入用户名/邮箱/手机号 与 密码");
+      Alert.alert("请输入用户名/手机号/邮箱 与 密码");
       return;
     }
     setLoading(true);
@@ -62,12 +62,12 @@ export default function LoginModal({ visible, onClose, onSuccess }: Props) {
 
           <View className="mt-4">
             <Text className="text-sm text-neutral-700">
-              用户名 / 邮箱 / 手机号
+              用户名 / 手机号 / 邮箱
             </Text>
             <TextInput
               value={identifier}
               onChangeText={setIdentifier}
-              placeholder="用户名 / 邮箱 / 手机号"
+              placeholder="用户名 / 手机号 / 邮箱"
               className="mt-2 rounded-md border border-neutral-200 bg-white px-3 py-2"
               autoCapitalize="none"
             />

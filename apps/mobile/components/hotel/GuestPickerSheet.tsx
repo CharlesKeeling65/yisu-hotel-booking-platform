@@ -16,33 +16,74 @@ type Props = {
   onConfirm: (next: GuestDraft) => void;
 };
 
+// 经过视觉绝对居中校准的步进器行组件
 function StepRow({
   label,
+  subtitle,
   value,
   min,
   onChange,
 }: {
   label: string;
+  subtitle?: string;
   value: number;
   min: number;
   onChange: (next: number) => void;
 }) {
+  const isAtMin = value <= min;
+
   return (
-    <View className="mt-3 flex-row items-center justify-between">
-      <Text className="text-sm text-slate-700">{label}</Text>
+    <View className="flex-row items-center justify-between py-3 border-b border-slate-50">
+      <View>
+        <Text className="text-[16px] font-bold text-slate-800">{label}</Text>
+        {subtitle && (
+          <Text className="mt-0.5 text-[11px] font-medium text-slate-400">{subtitle}</Text>
+        )}
+      </View>
       <View className="flex-row items-center">
+
         <Pressable
-          onPress={() => onChange(Math.max(min, value - 1))}
-          className="h-8 w-8 items-center justify-center rounded-full bg-slate-200"
+          onPress={() => !isAtMin && onChange(value - 1)}
+          className={`h-10 w-10 items-center justify-center rounded-full ${
+            isAtMin 
+              ? "bg-slate-50 opacity-40" 
+              : "bg-slate-100 active:bg-slate-200"
+          }`}
         >
-          <Text className="text-base font-semibold text-slate-700">-</Text>
+
+          <Text 
+            className={`text-[24px] font-medium ${isAtMin ? "text-slate-300" : "text-slate-600"}`}
+            style={{ 
+              includeFontPadding: false, 
+              textAlignVertical: 'center',
+              marginTop: -3 
+            }}
+          >
+            -
+          </Text>
         </Pressable>
-        <Text className="mx-3 w-6 text-center text-sm font-semibold text-slate-900">{value}</Text>
+        
+ 
+        <Text className="w-12 text-center text-[18px] font-extrabold text-slate-900">
+          {value}
+        </Text>
+        
+
         <Pressable
           onPress={() => onChange(value + 1)}
-          className="h-8 w-8 items-center justify-center rounded-full bg-[#E6F4FF]"
+          className="h-10 w-10 items-center justify-center rounded-full bg-[#E6F4FF] active:bg-[#D6EFFF]"
         >
-          <Text className="text-base font-semibold text-[#1890FF]">+</Text>
+
+          <Text 
+            className="text-[24px] font-medium text-[#1890FF]"
+            style={{ 
+              includeFontPadding: false, 
+              textAlignVertical: 'center',
+              marginTop: -3 
+            }}
+          >
+            +
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -50,9 +91,7 @@ function StepRow({
 }
 
 /**
- * 客房与入住人数弹窗（可复用）
- * - 完成：保存
- * - 关闭：不保存
+ * 客房与入住人数弹窗
  */
 export default function GuestPickerSheet({ visible, initial, onClose, onConfirm }: Props) {
   const [draft, setDraft] = useState<GuestDraft>(initial);
@@ -62,32 +101,38 @@ export default function GuestPickerSheet({ visible, initial, onClose, onConfirm 
   }, [visible, initial]);
 
   return (
-    <FilterBottomSheet visible={visible} title="请选择客房和入住人数" onClose={onClose}>
-      <StepRow
-        label="间数"
-        value={draft.rooms}
-        min={1}
-        onChange={(rooms) => setDraft((x) => ({ ...x, rooms, adults: Math.max(x.adults, rooms) }))}
-      />
-      <StepRow
-        label="成人数"
-        value={draft.adults}
-        min={draft.rooms}
-        onChange={(adults) => setDraft((x) => ({ ...x, adults: Math.max(adults, x.rooms) }))}
-      />
-      <StepRow
-        label="儿童数"
-        value={draft.children}
-        min={0}
-        onChange={(children) => setDraft((x) => ({ ...x, children }))}
-      />
+    <FilterBottomSheet visible={visible} title="选择客房和入住人数" onClose={onClose}>
+      <View className="px-1">
+        <StepRow
+          label="房间数"
+          value={draft.rooms}
+          min={1}
+          onChange={(rooms) => setDraft((x) => ({ ...x, rooms, adults: Math.max(x.adults, rooms) }))}
+        />
+        <StepRow
+          label="成人数"
+          subtitle="每间客房至少1名成人"
+          value={draft.adults}
+          min={draft.rooms}
+          onChange={(adults) => setDraft((x) => ({ ...x, adults: Math.max(adults, x.rooms) }))}
+        />
+        <StepRow
+          label="儿童数"
+          subtitle="17岁及以下"
+          value={draft.children}
+          min={0}
+          onChange={(children) => setDraft((x) => ({ ...x, children }))}
+        />
+      </View>
 
-      <Pressable
-        onPress={() => onConfirm({ ...draft, adults: Math.max(draft.adults, draft.rooms) })}
-        className="mt-5 rounded-2xl bg-[#1890FF] py-3"
-      >
-        <Text className="text-center text-sm font-semibold text-white">完成</Text>
-      </Pressable>
+      <View className="mt-8 mb-2">
+        <Pressable
+          onPress={() => onConfirm({ ...draft, adults: Math.max(draft.adults, draft.rooms) })}
+          className="items-center justify-center rounded-full bg-[#1890FF] py-3.5 active:bg-[#096DD9]"
+        >
+          <Text className="text-[16px] font-bold tracking-[1px] text-white">确定</Text>
+        </Pressable>
+      </View>
     </FilterBottomSheet>
   );
 }
