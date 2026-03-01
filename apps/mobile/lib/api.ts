@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { toPasswordCipher } from "@/lib/password-cipher";
 
 const API_BASE_URL =
   String(process.env.EXPO_PUBLIC_API_BASE_URL || "").trim() ||
@@ -139,12 +140,13 @@ export async function fetchMobileHotelById<T>(id: string) {
 }
 
 export async function loginMobile(username: string, password: string) {
+  const passwordCipher = toPasswordCipher(password);
   const res = await getJson<{
     token: string;
     user: { username?: string; name: string };
   }>("/api/mobile/login", {
     method: "POST",
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, passwordCipher }),
   });
   return res.data ?? null;
 }
@@ -155,19 +157,21 @@ export async function customerRegister(
   name?: string,
   email?: string,
 ) {
+  const passwordCipher = toPasswordCipher(password);
   const res = await getJson<any>(`/api/customer/register`, {
     method: "POST",
-    body: JSON.stringify({ password, phone, name, email }),
+    body: JSON.stringify({ passwordCipher, phone, name, email }),
   });
   return res.data ?? null;
 }
 
 export async function customerLogin(identifier: string, password: string) {
+  const passwordCipher = toPasswordCipher(password);
   const res = await getJson<{ token: string; customer: any }>(
     `/api/customer/login`,
     {
       method: "POST",
-      body: JSON.stringify({ identifier, password }),
+      body: JSON.stringify({ identifier, passwordCipher }),
     },
   );
   return res.data ?? null;

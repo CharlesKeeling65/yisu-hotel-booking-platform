@@ -4,6 +4,7 @@ const path = require("path");
 const cors = require("cors");
 const fs = require("fs");
 const mysql = require("mysql2/promise");
+const { sha256Hex: sha256, resolvePasswordCipher } = require("./lib/password-cipher");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const app = express();
@@ -244,13 +245,6 @@ function toDateOnly(value) {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
-}
-
-function sha256(input) {
-  return crypto
-    .createHash("sha256")
-    .update(String(input || ""))
-    .digest("hex");
 }
 
 function hashPassword(passwordCipher) {
@@ -801,9 +795,9 @@ app.get("/api/health", (_req, res) => {
 // Customer register/login for mobile app (simple flow)
 app.post("/api/customer/register", async (req, res) => {
   const p = req.body || {};
-  const plain = String(p.password || "");
+  const passwordCipher = resolvePasswordCipher(p);
   const phone = p.phone ? String(p.phone).trim() : "";
-  if (!phone || !plain)
+  if (!phone || !passwordCipher)
     return res.status(400).json({ code: 400, msg: "手机号与密码必填" });
   try {
     // generate customer id server-side with prefix (prefer UUID)
@@ -817,8 +811,7 @@ app.post("/api/customer/register", async (req, res) => {
     );
     if (dupPhone && dupPhone.length)
       return res.status(409).json({ code: 409, msg: "手机号已被注册" });
-    const cipher = sha256(plain);
-    const hashed = hashPassword(cipher);
+    const hashed = hashPassword(passwordCipher);
     await pool.query(
       "INSERT INTO `Customer` (id, password, phone, name, email) VALUES (?, ?, ?, ?, ?)",
       [
@@ -840,12 +833,13 @@ app.post("/api/customer/register", async (req, res) => {
 });
 
 app.post("/api/customer/login", async (req, res) => {
-  const { identifier, password } = req.body || {};
+  const { identifier } = req.body || {};
   const idv = String(identifier || "").trim();
-  if (!idv || !password)
+  const passwordCipher = resolvePasswordCipher(req.body || {});
+  if (!idv || !passwordCipher)
     return res
       .status(400)
-      .json({ code: 400, msg: "手机号/邮箱 与 password 必填" });
+      .json({ code: 400, msg: "手机号/邮箱 与密码必填" });
   try {
     // 支持通过手机号、邮箱、id 或 名称（用户名）登录
     const [rows] = await pool.query(
@@ -855,8 +849,7 @@ app.post("/api/customer/login", async (req, res) => {
     const customer = rows[0];
     if (!customer)
       return res.status(401).json({ code: 401, msg: "用户名或密码错误" });
-    const cipher = sha256(String(password || ""));
-    if (!verifyPassword(cipher, customer.password))
+    if (!verifyPassword(passwordCipher, customer.password))
       return res.status(401).json({ code: 401, msg: "用户名或密码错误" });
 
     // 生成 token 并保存到 Customer 表（轻量 session 方案）
@@ -1056,9 +1049,7 @@ app.post("/api/auth/register", async (req, res) => {
       .json({ code: 400, msg: `密码强度不足：${strengthTips.join("、")}` });
   }
 
-  const passwordCipher = String(
-    p.passwordCipher || sha256(plainPassword || ""),
-  );
+  const passwordCipher = resolvePasswordCipher(p);
   if (!passwordCipher)
     return res.status(400).json({ code: 400, msg: "密码不能为空" });
 
@@ -1113,7 +1104,7 @@ app.post("/api/auth/login", async (req, res) => {
     if (!user)
       return res.status(401).json({ code: 401, msg: "账号不存在或密码错误" });
 
-    const cipher = String(passwordCipher || sha256(String(password || "")));
+    const cipher = resolvePasswordCipher({ passwordCipher, password });
     if (!verifyPassword(cipher, user.password)) {
       return res.status(401).json({ code: 401, msg: "账号不存在或密码错误" });
     }
@@ -2707,7 +2698,7 @@ app.post("/api/mobile/login", async (req, res) => {
     const user = rows[0];
     if (!user)
       return res.status(401).json({ code: 401, msg: "账号不存在或密码错误" });
-    const cipher = String(passwordCipher || sha256(String(password || "")));
+    const cipher = resolvePasswordCipher({ passwordCipher, password });
     if (!verifyPassword(cipher, user.password)) {
       return res.status(401).json({ code: 401, msg: "账号不存在或密码错误" });
     }
