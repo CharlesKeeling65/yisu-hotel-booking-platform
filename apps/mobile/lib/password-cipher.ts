@@ -1,11 +1,11 @@
-function rightRotate(value: number, shift: number) {
-  return (value >>> shift) | (value << (32 - shift));
+function toUtf8Binary(input: string): string {
+  return unescape(encodeURIComponent(String(input || "")));
 }
 
 export function sha256Hex(input: string): string {
+  const ascii = toUtf8Binary(input);
+  const maxWord = 2 ** 32;
   const words: number[] = [];
-  const ascii = unescape(encodeURIComponent(String(input || "")));
-  const bitLength = ascii.length * 8;
   const hash = [
     0x6a09e667,
     0xbb67ae85,
@@ -30,53 +30,66 @@ export function sha256Hex(input: string): string {
     0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
   ];
 
-  for (let i = 0; i < ascii.length; i += 1) {
-    words[i >> 2] |= ascii.charCodeAt(i) << ((3 - (i % 4)) * 8);
+  let padded = ascii + "\x80";
+  while ((padded.length % 64) !== 56) padded += "\x00";
+
+  for (let i = 0; i < padded.length; i += 1) {
+    words[i >> 2] |= padded.charCodeAt(i) << ((3 - (i % 4)) * 8);
   }
-  words[bitLength >> 5] |= 0x80 << (24 - (bitLength % 32));
-  words[(((bitLength + 64) >> 9) << 4) + 15] = bitLength;
 
-  for (let i = 0; i < words.length; i += 16) {
-    const w = words.slice(i, i + 16);
-    for (let j = 16; j < 64; j += 1) {
+  const bitLength = ascii.length * 8;
+  words[words.length] = Math.floor(bitLength / maxWord);
+  words[words.length] = bitLength;
+
+  for (let start = 0; start < words.length; start += 16) {
+    const w = words.slice(start, start + 16);
+    const working = hash.slice();
+
+    for (let i = 0; i < 64; i += 1) {
+      const w15 = w[i - 15];
+      const w2 = w[i - 2];
       const s0 =
-        rightRotate(w[j - 15], 7) ^
-        rightRotate(w[j - 15], 18) ^
-        (w[j - 15] >>> 3);
+        i < 16
+          ? 0
+          : ((w15 >>> 7) | (w15 << 25)) ^
+            ((w15 >>> 18) | (w15 << 14)) ^
+            (w15 >>> 3);
       const s1 =
-        rightRotate(w[j - 2], 17) ^
-        rightRotate(w[j - 2], 19) ^
-        (w[j - 2] >>> 10);
-      w[j] = (((w[j - 16] + s0) | 0) + ((w[j - 7] + s1) | 0)) | 0;
+        i < 16
+          ? 0
+          : ((w2 >>> 17) | (w2 << 15)) ^
+            ((w2 >>> 19) | (w2 << 13)) ^
+            (w2 >>> 10);
+
+      w[i] =
+        i < 16
+          ? (w[i] | 0)
+          : (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+
+      const ch = (working[4] & working[5]) ^ (~working[4] & working[6]);
+      const maj =
+        (working[0] & working[1]) ^
+        (working[0] & working[2]) ^
+        (working[1] & working[2]);
+      const sigma0 =
+        ((working[0] >>> 2) | (working[0] << 30)) ^
+        ((working[0] >>> 13) | (working[0] << 19)) ^
+        ((working[0] >>> 22) | (working[0] << 10));
+      const sigma1 =
+        ((working[4] >>> 6) | (working[4] << 26)) ^
+        ((working[4] >>> 11) | (working[4] << 21)) ^
+        ((working[4] >>> 25) | (working[4] << 7));
+      const temp1 = (working[7] + sigma1 + ch + k[i] + w[i]) | 0;
+      const temp2 = (sigma0 + maj) | 0;
+
+      working.pop();
+      working.unshift((temp1 + temp2) | 0);
+      working[4] = (working[4] + temp1) | 0;
     }
 
-    let [a, b, c, d, e, f, g, h] = hash;
-    for (let j = 0; j < 64; j += 1) {
-      const s1 = rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25);
-      const ch = (e & f) ^ (~e & g);
-      const temp1 = ((((h + s1) | 0) + ((ch + k[j]) | 0)) + (w[j] | 0)) | 0;
-      const s0 = rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22);
-      const maj = (a & b) ^ (a & c) ^ (b & c);
-      const temp2 = (s0 + maj) | 0;
-
-      h = g;
-      g = f;
-      f = e;
-      e = (d + temp1) | 0;
-      d = c;
-      c = b;
-      b = a;
-      a = (temp1 + temp2) | 0;
+    for (let i = 0; i < 8; i += 1) {
+      hash[i] = (hash[i] + working[i]) | 0;
     }
-
-    hash[0] = (hash[0] + a) | 0;
-    hash[1] = (hash[1] + b) | 0;
-    hash[2] = (hash[2] + c) | 0;
-    hash[3] = (hash[3] + d) | 0;
-    hash[4] = (hash[4] + e) | 0;
-    hash[5] = (hash[5] + f) | 0;
-    hash[6] = (hash[6] + g) | 0;
-    hash[7] = (hash[7] + h) | 0;
   }
 
   return hash
