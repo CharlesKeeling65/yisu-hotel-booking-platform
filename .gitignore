@@ -29,6 +29,10 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
+deploy/certbot/conf/*
+!deploy/certbot/conf/.gitkeep
+deploy/certbot/www/*
+!deploy/certbot/www/.gitkeep
 
 # local env files
 .env*.local
