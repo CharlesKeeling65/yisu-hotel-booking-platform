@@ -8,6 +8,7 @@ RUN npm install --omit=dev --no-audit --no-fund --progress=false \
   --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 
 COPY server.js ./
+COPY lib ./lib
 COPY sql ./sql
 
 EXPOSE 3000
