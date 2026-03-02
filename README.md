@@ -1,180 +1,86 @@
-# 易宿酒店预订平台（Monorepo）
+# 易宿酒店预订平台
 
-> 最后梳理日期：2026-02-24
+易宿酒店预订平台是一个基于 Monorepo 管理的酒店预订项目，包含用户移动端、商户/管理员 Web 管理端以及 Express API 服务。项目围绕酒店浏览、搜索筛选、下单支付、订单管理、酒店录入、审核发布等核心流程搭建，适合作为全栈课程项目与多端协同开发示例。
 
-本项目是一个三端一体的酒店预订系统：
+## 项目概览
 
-- 用户端移动应用（Expo + React Native）
-- 商户/管理员 Web 管理端（React + Vite）
-- 后端 API（Express + MySQL）
+- 用户端：基于 Expo + React Native，实现首页、酒店列表、详情、预订、订单、定位与登录注册等流程
+- 管理端：基于 React + Vite，覆盖登录注册、酒店管理、房型维护、审核发布与上下线操作
+- 服务端：基于 Express + MySQL，提供认证、酒店、房型、订单、定位和后台审核接口
+- 共享包：`packages/shared` 提供跨端共享的数据结构定义
 
-仓库采用 Monorepo 管理，目录如下：
+## 功能特性
 
-- `apps/mobile`：移动端（用户搜索、列表、详情、下单、订单、定位）
-- `apps/web`：Web 管理端（登录注册、酒店管理、审核发布、房型管理）
-- `apps/api`：后端服务（鉴权、酒店、房型、审核、订单、定位与联想）
-- `packages/shared`：共享类型（Hotel/Room 等）
-- `Task_requirements`：原始需求与阶段计划
-- `docs`：方案与过程文档
+### 移动端
 
-## 1. 技术栈（当前实际）
+- 首页 Banner、搜索面板、日期与人数筛选
+- 酒店列表筛选、排序、分页加载
+- 酒店详情与房型展示
+- 下单、支付、订单详情与取消订单
+- 地理定位、逆地理编码与地点联想
+- 用户注册、登录与本地会话持久化
 
-- Mobile：Expo Router + React Native 0.81 + TypeScript + NativeWind
-- Web：React 19 + Vite + React Router + Tailwind + Shadcn UI
-- API：Node.js
-- DB：MySQL 8（建议 docker-compose 启动）
+### Web 管理端
 
-## 2. 已实现功能梳理（基于当前代码）
+- 角色注册与登录
+- 酒店列表查询、状态筛选与统计
+- 酒店新建、编辑、删除与软下线
+- 房型增删改与批量保存
+- 管理员审核、发布、驳回流程
 
-### 2.1 移动端（`apps/mobile`）
+### API 服务
 
-- 首页
-  - Banner 轮播并可跳酒店详情
-  - 搜索面板：城市、位置、日期、人数、价格/星级、快捷标签
-  - 定位按钮：调用逆地理编码并回填城市/位置
-- 定位页
-  - 当前定位 + 行政区（省/市/区县）手动兜底
-  - 输入联想（后端 `/api/location/suggest` + 本地 fallback）
-  - 逆地理编码统一字段消费（`normalized.cityOrCounty/street`）
-- 列表页
-  - 条件搜索、筛选、排序
-  - 触底加载（分页）
-  - 过滤弹层（景点、价格/星级、标签、排序）
-- 详情页
-  - 酒店图集轮播、基础信息展示
-  - 房型列表，按价格升序展示
-  - 日期与人数可改，进入预订页
-- 预订页
-  - 联系人信息、入住时段、房间数与费用明细
-  - 创建订单、拉起支付、支付成功跳转
-- 订单页/订单列表
-  - 订单列表分页、状态筛选
-  - 支付、取消、订单明细（费用 breakdown）
-- 登录注册
-  - Customer 注册/登录
-  - token 存储在 `AsyncStorage`
+- 用户与客户账号认证
+- 酒店、房型、订单 CRUD 与聚合接口
+- 审核发布接口
+- 地理编码与地点联想接口
+- 数据库初始化与示例数据写入
 
-### 2.2 Web 管理端（`apps/web`）
+## 技术栈
 
-- 登录/注册
-  - 角色注册（admin/merchant/user）
-  - 登录后保存会话到 sessionStorage
-- Dashboard
-  - 酒店列表分页、关键字/城市筛选
-  - 状态筛选：待审核、待发布、营业中、被驳回
-  - 状态统计（总数与各状态计数）
-- 酒店详情
-  - 基础信息 + 房型 + 状态展示
-  - 管理员审核（通过/驳回）、发布、下线
-  - 商户下线（软下线）
-- 酒店编辑页
-  - 创建/编辑酒店基础信息
-  - 保存后触发状态回到待审核
-- 房型管理页
-  - 房型增删改
-  - 批量保存（bulk-save）
-  - 库存与房态联动
+| 端     | 技术                                                    |
+| ------ | ------------------------------------------------------- |
+| Mobile | Expo Router、React Native 0.81、TypeScript、NativeWind  |
+| Web    | React 19、Vite 5、React Router、Tailwind CSS、shadcn/ui |
+| API    | Node.js、Express 4                                      |
+| 数据库 | MySQL 8                                                 |
 
-### 2.3 API（`apps/api/server.js`）
+## 仓库结构
 
-- 认证与用户
-  - `POST /api/auth/register`
-  - `POST /api/auth/login`
-  - `GET /api/auth/test-accounts`
-  - `POST /api/customer/register`
-  - `POST /api/customer/login`
-- 地理能力
-  - `GET /api/geocode/reverse`（Nominatim/BigDataCloud/AMap 策略）
-  - `GET /api/location/suggest`（真实联想）
-- 酒店与房型
-  - `GET/POST/PUT/DELETE /api/hotels`
-  - `GET /api/hotels/stats`
-  - `GET/POST/PUT/DELETE /api/hotels/:id/rooms`
-  - `PUT /api/hotels/:id/rooms/bulk-save`
-- 审核发布
-  - `GET /api/admin/hotels/pending`
-  - `POST /api/admin/hotels/:id/audit`
-  - `POST /api/admin/hotels/:id/publish`
-  - `POST /api/admin/hotels/:id/offline`
-- 移动端聚合接口
-  - `GET /api/mobile/home-banner`
-  - `GET /api/mobile/hotels`
-  - `GET /api/mobile/hotels/:id`
-  - `POST /api/mobile/orders`
-  - `POST /api/mobile/orders/:id/pay`
-  - `PUT /api/mobile/orders/:id/cancel`
-  - `GET /api/mobile/orders`
-  - `GET /api/mobile/orders/:id/breakdown`
+```text
+.
+├── apps
+│   ├── api           # Express API 与 SQL 初始化脚本
+│   ├── mobile        # Expo / React Native 用户端
+│   └── web           # React + Vite 管理端
+├── packages
+│   └── shared        # 跨端共享类型与数据结构
+├── deploy
+│   ├── certbot       # 证书目录占位
+│   └── nginx         # Nginx 网关配置
+└── docker-compose.yml
+```
 
-## 3. 与原始需求对比（`Task_requirements/original_task_requirements.md`）
+## 快速开始
 
-### 3.1 完成度较高
+### 1. 环境要求
 
-- 移动端三大核心页（首页/列表/详情）已落地
-- 列表页支持触底加载
-- 详情页房型可按价格排序展示
-- Web 端登录注册、酒店录入编辑、审核/发布/下线流程已打通
-- 软下线能力已实现（非物理删除）
+- Node.js 18+
+- npm 9+
+- Docker 与 Docker Compose（推荐，用于启动 MySQL 和容器化服务）
+- 本地 MySQL 8（如果不使用 Docker）
 
-### 3.2 部分完成
+### 2. 安装依赖
 
-- “实时更新”目前主要依靠刷新/重新请求，不是 WebSocket/SSE 实时推送
-- 权限控制是前后端轻量实现，未形成完整 RBAC 中间件体系
-- README 与工程文档此前不完整（本次已补齐）
-
-### 3.3 仍有差距
-
-- 移动端“搜索历史”未形成完整产品化能力
-- 地图展示能力仍为可选状态（需求中可忽略，当前也未强依赖）
-- 仍有部分页面用 mock 或静态展示数据（如 profile 统计）
-
-## 4. 与计划文档对比（`Task_requirements/plan.md`）
-
-`plan.md` 偏“理想化全栈规划”（含 Next.js/Prisma/NextAuth 等），与当前仓库实际技术路线存在偏差：
-
-- 计划栈：Next.js + Prisma + NextAuth
-- 实际栈：React/Vite + Expo + Express + MySQL
-
-对比结论：
-
-- 业务主链路（搜索、详情、下单、审核发布）已按目标方向落地
-- 架构层目标（统一契约、强 RBAC、实时同步、系统化测试）尚未完全达到计划中的工程化标准
-
-## 5. 快速启动
-
-### 5.1 安装依赖
+在仓库根目录执行：
 
 ```bash
 npm install
 ```
 
-### 5.2 启动 MySQL（推荐）
+### 3. 配置环境变量
 
-```bash
-docker compose up -d
-```
-
-默认映射：`127.0.0.1:3307 -> mysql:3306`
-
-### 5.3 启动三端
-
-```bash
-npm run dev:web
-npm run dev:api
-npm run dev:mobile
-```
-
-或并行启动：
-
-```bash
-npm run dev
-```
-
-## 6. 环境变量
-
-### 6.1 API（`apps/api/.env`）
-
-可参考 `apps/api/.env.example`：
+API 默认读取 [apps/api/.env.example](./apps/api/.env.example) 对应的配置。首次启动可复制为 `apps/api/.env`：
 
 ```env
 PORT=3000
@@ -183,81 +89,103 @@ DB_PORT=3307
 DB_USER=root
 DB_PASS=123456
 DB_NAME=yisu_db
+```
 
-# 可选：定位逆地理编码
-AMAP_WEB_KEY=你的高德Web服务Key
+可选配置：
+
+```env
+AMAP_WEB_KEY=你的高德 Web 服务 Key
 GEO_PROVIDER_MODE=auto
-# auto: Nominatim -> BigDataCloud -> AMap
-# amap: AMap优先，失败再回退
-# amap_only: 仅AMap
 GEO_TIMEOUT_MS=4500
 ```
 
 说明：
 
-- `AMAP_WEB_KEY` 仅放在后端 `.env`，不要下发到移动端/Web 端。
-- Web 端通过 Vite 代理访问 `/api`。
-- 移动端当前 `apps/mobile/lib/api.ts` 默认请求 `http://localhost:3000`，真机调试需改为局域网 IP。
+- Web 端通过 Vite 代理访问 `/api`，默认转发到 `http://localhost:3000`
+- 移动端默认请求 `http://localhost:3000`；使用真机调试时，需要把 [apps/mobile/lib/api.ts](./apps/mobile/lib/api.ts) 中的地址改成局域网 IP
+- `AMAP_WEB_KEY` 只应保存在服务端，不要暴露到前端
 
-## 7. 数据库初始化与“重置”行为说明
+### 4. 启动数据库
 
-`npm run dev:api` 启动时，`apps/api/server.js` 会执行初始化逻辑：
-
-- 总会执行（幂等）
-  - `sql/init_schema.sql`
-  - `sql/create_orders_table.sql`
-  - `sql/create_customers_table.sql`（Customer 不再 drop）
-  - `sql/migrate_add_room_fields.sql`
-  - TEST_USERS 的 upsert（User 测试账号会更新/覆盖同 ID 记录）
-- 条件执行（`Hotel_Base` 数量 `< 20`）
-  - `sql/seed_sample.sql`
-  - `sql/add_20_hotels_data.sql`
-
-关键影响：
-
-- `Customer` 表重启 API 后不会被清空，适合移动端登录态与回归测试。
-- `User` 内置测试账号会被 upsert，密码与资料会回到代码中的默认值。
-- 酒店种子数据仅在酒店数量不足时补种，不是每次都全量重置。
-
-## 8. 默认测试账号（来自 `apps/api/server.js`）
-
-- 管理员
-  - `admin.ops / Admin#2026!Ops`
-  - `admin.audit / Admin#2026!Audit`
-  - `admin.release / Admin#2026!Release`
-- 商户
-  - `m.shanghai / Merchant#2026!SH`
-  - `m.beijing / Merchant#2026!BJ`
-  - `m.shenzhen / Merchant#2026!SZ`
-  - `m.hangzhou / Merchant#2026!HZ`
-  - `m.chengdu / Merchant#2026!CD`
-- 演示用户
-  - `user.demo / User#2026!Demo`
-
-## 9. 测试与校验
+推荐直接使用 Docker：
 
 ```bash
-npm test
+docker compose up -d mysql
 ```
 
-当前会执行：
+默认端口映射为 `127.0.0.1:3306 -> mysql:3306`。如果继续使用仓库内默认 `.env.example`，请把 `DB_PORT` 调整为你本地实际端口；若使用 `docker-compose.yml` 中的 MySQL 服务，API 容器内部使用的是 `3306`。
 
-- Web：`vite build`
-- API：`node --check server.js`
-- Mobile：`expo lint`
+### 5. 启动开发环境
 
-说明：目前缺少系统化的端到端自动化测试与 API 单元测试覆盖。
+分别启动：
 
-## 10. 当前已知问题与下一步建议
+```bash
+npm run dev:web
+npm run dev:api
+npm run dev:mobile
+```
 
-- 建议优先补齐统一响应结构与错误码约束（当前仍存在 `msg`/`message` 混用）
-- 建议补全真正的 RBAC（后端鉴权中间件 + 路由权限矩阵）
-- 建议把移动端 Profile 中的静态统计替换为真实接口
-- 建议增加 API 与关键业务流程测试（下单并发、审核流转、库存回滚）
+或在根目录并行启动：
 
----
+```bash
+npm run dev
+```
 
-如需查看任务目标，请直接参考：
+启动后默认访问方式：
 
-- `Task_requirements/original_task_requirements.md`
-- `Task_requirements/plan.md`
+- Web 管理端：`http://localhost:5173`
+- API 健康检查：`http://localhost:3000/api/health`
+- 移动端：通过 Expo Dev Tools / 模拟器 / 真机打开
+
+## 常用脚本
+
+| 命令                  | 说明                      |
+| --------------------- | ------------------------- |
+| `npm run dev`         | 并行启动 Web、API、Mobile |
+| `npm run dev:web`     | 启动 Web 管理端           |
+| `npm run dev:api`     | 启动 API 服务             |
+| `npm run dev:mobile`  | 启动 Expo 开发服务器      |
+| `npm test`            | 依次执行三端校验          |
+| `npm run test:web`    | 执行 Web 构建校验         |
+| `npm run test:api`    | 执行 API 语法检查         |
+| `npm run test:mobile` | 执行 Mobile lint          |
+
+## 数据初始化说明
+
+API 启动时会执行 [apps/api/server.js](./apps/api/server.js) 中的数据库初始化逻辑，并加载 [apps/api/sql](./apps/api/sql) 下的建表与种子脚本。
+
+当前行为大致如下：
+
+- 基础表结构与订单、客户相关迁移会按幂等方式执行
+- 内置测试账号会被 upsert，便于演示和回归验证
+- 酒店示例数据会在数量不足时补齐，不是每次启动都全量覆盖
+
+这意味着开发时可以反复重启 API，而不必每次手动重新造数。
+
+## 默认测试账号
+
+项目内置了若干测试账号，完整列表可通过接口 `GET /api/auth/test-accounts` 查看，也可以直接参考 [apps/api/server.js](./apps/api/server.js) 中的测试账号定义。
+
+常用账号示例：
+
+- 管理员：`admin.ops / Admin#2026!Ops`
+- 商户：`m.shanghai / Merchant#2026!SH`
+- 演示用户：`user.demo / User#2026!Demo`
+
+## Docker 部署
+
+仓库根目录提供了 [docker-compose.yml](./docker-compose.yml)，可用于启动完整容器化环境：
+
+- `mysql`
+- `api`
+- `web`
+- `mobile-web`
+- `gateway`
+
+直接启动：
+
+```bash
+docker compose up -d --build
+```
+
+Nginx 网关配置位于 [deploy/nginx/gateway.conf](./deploy/nginx/gateway.conf)。
