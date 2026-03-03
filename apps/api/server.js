@@ -194,9 +194,9 @@ function normalizeReverseGeocodePayload(payload) {
   const districtNorm = stripRegionSuffix(district);
   const street =
     !rawStreet ||
-    streetNorm === cityOrCounty ||
-    streetNorm === cityNorm ||
-    streetNorm === districtNorm
+      streetNorm === cityOrCounty ||
+      streetNorm === cityNorm ||
+      streetNorm === districtNorm
       ? ""
       : rawStreet;
 
@@ -384,6 +384,16 @@ const TEST_USERS = [
   },
 ];
 
+const TEST_CUSTOMERS = [
+  {
+    id: "customer_demo_001",
+    phone: "13800138000",
+    name: "user_test",
+    email: "customer.demo@yisu.com",
+    password: "123456",
+  },
+];
+
 async function initDbPool() {
   const tmpConn = await mysql.createConnection({
     host: DB_HOST,
@@ -519,6 +529,26 @@ async function initDbPool() {
         user.companyName,
         user.role,
         hashed,
+      ],
+    );
+  }
+
+  for (const customer of TEST_CUSTOMERS) {
+    const hashed = hashPassword(sha256(customer.password));
+    await pool.query(
+      `INSERT INTO \`Customer\` (id, password, phone, name, email)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+       password = VALUES(password),
+       phone = VALUES(phone),
+       name = VALUES(name),
+       email = VALUES(email)`,
+      [
+        customer.id,
+        hashed,
+        customer.phone,
+        customer.name,
+        customer.email,
       ],
     );
   }
@@ -1378,11 +1408,11 @@ app.get("/api/hotels/stats", async (req, res) => {
       OR EXISTS (
         SELECT 1
         FROM ` +
-          "`Hotel_Label_Rel`" +
-          ` rel
+        "`Hotel_Label_Rel`" +
+        ` rel
         JOIN ` +
-          "`Facility_Label`" +
-          ` l ON rel.label_id = l.id
+        "`Facility_Label`" +
+        ` l ON rel.label_id = l.id
         WHERE rel.hotel_id = b.id
           AND (l.label_name LIKE ? OR l.label_code LIKE ?)
       )
@@ -2595,7 +2625,7 @@ app.get("/api/mobile/orders/:id/breakdown", async (req, res) => {
         items[0].unitPrice = Number(
           items[0].amount / denom || items[0].unitPrice || 0,
         );
-      } catch (_e) {}
+      } catch (_e) { }
     }
 
     return res.json({
@@ -2646,8 +2676,8 @@ app.get("/api/mobile/orders", async (req, res) => {
     // 查询列表
     const [rows] = await pool.query(
       "SELECT o.*, h.name_cn AS hotel_name, h.city AS hotel_city, h.county AS hotel_county, h.address AS hotel_address, r.name AS room_name FROM `orders` o LEFT JOIN `Hotel_Base` h ON o.hotel_id = h.id LEFT JOIN `Room` r ON o.room_id = r.id " +
-        whereSql +
-        " ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
+      whereSql +
+      " ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
       listParams.concat([pageSize, offset]),
     );
     if (process.env.NODE_ENV !== "production") {
@@ -2662,7 +2692,7 @@ app.get("/api/mobile/orders", async (req, res) => {
           "offset=",
           offset,
         );
-      } catch (_e) {}
+      } catch (_e) { }
     }
 
     // 查询总数

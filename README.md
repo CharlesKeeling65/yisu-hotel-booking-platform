@@ -170,7 +170,7 @@ API 启动时会执行 [apps/api/server.js](./apps/api/server.js) 中的数据�
 
 - 管理员：`admin.ops / Admin#2026!Ops`
 - 商户：`m.shanghai / Merchant#2026!SH`
-- 演示用户：`user.demo / User#2026!Demo`
+- 演示用户：`user_test / 123456`
 
 ## Docker 部署
 
