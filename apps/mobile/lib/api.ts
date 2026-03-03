@@ -1,9 +1,29 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { toPasswordCipher } from "@/lib/password-cipher";
 
-const API_BASE_URL =
-  String(process.env.EXPO_PUBLIC_API_BASE_URL || "").trim() ||
-  (typeof window !== "undefined" ? "" : "http://localhost:3000");
+function resolveApiBaseUrl() {
+  const explicitBaseUrl = String(
+    process.env.EXPO_PUBLIC_API_BASE_URL || "",
+  ).trim();
+  if (explicitBaseUrl) return explicitBaseUrl;
+
+  if (typeof window !== "undefined") {
+    const { protocol, hostname, port } = window.location;
+    const isExpoWebDevServer = port === "8081" || port === "19006";
+
+    // Expo Web dev server runs on its own origin, but the local API still lives on :3000.
+    if (isExpoWebDevServer && hostname) {
+      return `${protocol}//${hostname}:3000`;
+    }
+
+    // In container/proxy deployments we want relative requests so Nginx can route /api.
+    return "";
+  }
+
+  return "http://localhost:3000";
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 type ApiResponse<T> = {
   code: number;
